@@ -1,5 +1,7 @@
 # Italian Train Widget for iOS Scriptable
 
+<img width="660" height="470" alt="Screenshot 2025-09-24 at 14 13 43" src="https://github.com/user-attachments/assets/0554a3f6-27bd-41ff-8c0c-0df64fc7a0be" />
+
 A smart commuter widget for Italian trains that automatically switches between morning and evening directions based on time of day. Built specifically for the Roma Tuscolana ↔ Muratella route using FL1 line data. Built with Claude Sonnet 4.
 
 Best option to call this from your iOS homescreen is via Shortcuts. Make a new scriptable shortcut that just runs the script, add it to your homescreen, and you'll get a little pop-up every time you tap it with your next 3 trains.
