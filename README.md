@@ -2,6 +2,8 @@
 
 A smart commuter widget for Italian trains that automatically switches between morning and evening directions based on time of day. Built specifically for the Roma Tuscolana ↔ Muratella route using FL1 line data. Built with Claude Sonnet 4.
 
+Best option to call this from your iOS homescreen is via Shortcuts. Make a new scriptable shortcut that just runs the script, add it to your homescreen, and you'll get a little pop-up every time you tap it with your next 3 trains.
+
 ## Features
 
 - **Auto-switching directions**: Morning outbound (Tuscolana → Muratella), Evening inbound (Muratella → Tuscolana)
