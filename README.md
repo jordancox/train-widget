@@ -1,4 +1,4 @@
-# Italian Train Widget for iOS Scriptable
+# Get Quick Italian Train Times via Scriptable on iOS
 
 <img width="660" height="470" alt="Screenshot 2025-09-24 at 14 13 43" src="https://github.com/user-attachments/assets/0554a3f6-27bd-41ff-8c0c-0df64fc7a0be" />
 
