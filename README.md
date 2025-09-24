@@ -1,6 +1,6 @@
 # Italian Train Widget for iOS Scriptable
 
-A smart commuter widget for Italian trains that automatically switches between morning and evening directions based on time of day. Built specifically for the Roma Tuscolana ↔ Muratella route using FL1 line data.
+A smart commuter widget for Italian trains that automatically switches between morning and evening directions based on time of day. Built specifically for the Roma Tuscolana ↔ Muratella route using FL1 line data. Built with Claude Sonnet 4.
 
 ## Features
 
@@ -157,16 +157,6 @@ The widget uses the official Viaggiatreno API:
 - **Method**: GET
 - **Headers**: User-Agent required for iOS compatibility
 
-## Version Control Ready
-
-This project includes:
-- Clean separation of configuration and code
-- Modular architecture for easy maintenance  
-- Testing utilities for validation
-- Documentation for setup and customization
-
-Ready to commit to your preferred version control system.
-
 ## License
 
-This project is provided as-is for personal use. Trenitalia API usage follows their terms of service.
+This project is provided as-is for personal use.
