@@ -216,15 +216,20 @@ function getUrgencyLevel(minutesUntil, delay) {
 }
 
 function getTrainStatus(train) {
-    const minutesUntil = Math.round((train.orarioPartenza - Date.now()) / 60000);
     const delay = train.ritardo || 0;
-    const urgency = getUrgencyLevel(minutesUntil, delay);
+    const scheduledDeparture = train.orarioPartenza;
+    
+    // Calculate actual departure time including delay
+    const actualDepartureTime = scheduledDeparture + (delay * 60000); // delay is in minutes
+    const minutesUntil = Math.round((actualDepartureTime - Date.now()) / 60000);
+    
+    const urgency = getUrgencyLevel(minutesUntil, 0); // Already factored delay into minutesUntil
     
     return {
         minutesUntil,
         delay,
         urgency,
-        displayTime: new Date(train.orarioPartenza).toLocaleTimeString('it-IT', {
+        displayTime: new Date(scheduledDeparture).toLocaleTimeString('it-IT', {
             hour: '2-digit', 
             minute: '2-digit'
         })
