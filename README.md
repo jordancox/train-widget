@@ -22,49 +22,35 @@ Obviously, for several days, this widget was showing mock data that I was using 
 
 1. Download and install [Scriptable](https://apps.apple.com/app/scriptable/id1405459188) from the App Store
 2. Copy the contents of `train-widget.js` into a new script in Scriptable
-3. Customize the CONFIG section at the top of the file for your route
+3. Customize the constants at the top of the file for your route
 4. Add widget to your home screen, except it'll only update once every 15-30 minutes unless you tap it, and when you tap it, it opens scriptable. It's better to use Shortcuts and call it that way (just make a shortcut that runs scriptable and calls the script, no other instructions), add it to your home screen, and you get it in a little pop-over window with a big 'done' button to make it go away. One tap to see it, one tap to close it.
 
 ## Configuration
 
-Edit the CONFIG section at the top of `train-widget.js` to customize for your route:
+Edit the constants at the top of `train-widget.js` to customize for your route:
 
 ```javascript
-const CONFIG = {
-    stations: {
-        tuscolana: {
-            code: 'S08408',      // Your departure station code
-            name: 'Roma Tuscolana'
-        },
-        muratella: {
-            code: 'S08311',      // Your arrival station code
-            name: 'Muratella'
-        }
-    },
-    
-    schedule: {
-        morningCutoff: 14,   // Hour to switch directions (24h format)
-        eveningCutoff: 22,   // Hour to switch back
-    },
-    
-    theme: {
-        morningColor: "#2c5530",  // Colors and emojis
-        eveningColor: "#2d4a3a",
-        morningEmoji: "✈️",
-        eveningEmoji: "🏠"
-    }
-    // ... more options in the file
-};
+// Station codes
+const TUSCOLANA_CODE = 'S08408'; // Roma Tuscolana
+const MURATELLA_CODE = 'S08400'; // Muratella
+const FIUMICINO_CODE = 'S08000'; // Fiumicino Aeroporto
+
+// Schedule configuration
+const MORNING_CUTOFF = 14; // 2 PM - switch to evening schedule after this hour
+const EVENING_CUTOFF = 22; // 10 PM - back to morning schedule after this
+
+// Colors are set in the createWidget() function around line 247
 ```
 
 ### Finding Station Codes
 
 Common Roman station codes:
 - `S08408` - Roma Tuscolana
-- `S08311` - Muratella  
+- `S08400` - Muratella
 - `S08409` - Roma Ostiense
 - `S08501` - Roma Trastevere
 - `S08500` - Roma Termini
+- `S08000` - Fiumicino Aeroporto
 
 You can find more station codes by checking the official Viaggiatreno website or using the URL pattern in a browser to test different codes, says Claude. I don't know? You can try it out.
 
@@ -79,26 +65,26 @@ You can find more station codes by checking the official Viaggiatreno website or
 
 ### Different Routes
 1. Find your station codes (see Finding Station Codes section)
-2. Update station codes in the CONFIG section
-3. Modify route filters for relevant destinations
+2. Update station codes at the top of the file (lines 5-7)
+3. Modify `AIRPORT_LINE_STATIONS` and `CITY_STATIONS` arrays (lines 14-32) for relevant destinations
 4. Adjust schedule cutoff times if needed
 
 ### Visual Changes
-- Modify theme colors in the CONFIG section
-- Change emojis for different directions
-- Adjust urgency thresholds in the widget code
+- Modify background colors in `createWidget()` function (lines 247-251)
+- Change emojis in `getCommuteDirection()` function (lines 45, 57, 68)
+- Adjust urgency thresholds in `getUrgencyLevel()` function (lines 210-216)
 
 ### Schedule Adjustments
-- Update `morningCutoff` and `eveningCutoff` times
-- Modify mock schedule patterns for your route
-- Adjust peak hour definitions
+- Update `MORNING_CUTOFF` and `EVENING_CUTOFF` constants (lines 10-11)
+- Modify mock schedule patterns in `getMockTrains()` function (lines 160-171)
+- Adjust peak hour definitions (lines 192-193)
 
 ## API Reference
 
-The widget uses the official Viaggiatreno API:
-- **Endpoint**: `http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/partenze/{stationCode}/{timestamp}`
+The widget uses the official Viaggiatreno mobile API:
+- **Endpoint**: `http://www.viaggiatreno.it/infomobilitamobile/resteasy/viaggiatreno/partenze/{stationCode}/{dateString}`
 - **Method**: GET
-- **Headers**: User-Agent required for iOS compatibility
+- **Date format**: JavaScript Date.toString() format (e.g., "Fri Jan 15 2025 14:30:00 GMT+0100")
 
 ## License
 
