@@ -8,6 +8,8 @@ This is a simple bit of javascript that you run in Scriptable, an iOS app, that 
 
 Best option to call this from your iOS homescreen is via Shortcuts. Make a new scriptable shortcut that just runs the script, add it to your homescreen, and you'll get a little pop-up every time you tap it with your next 3 trains.
 
+Obviously, for several days, this widget was showing mock data that I was using to conveniently miss several trains or spend an extra 10m at the station unnecessarily. When I finally got around to looking at a log or console or what have you in scriptable, there were several bugs that Claude (eventually) fixed. Now it (probably) works.
+
 ## Features Claude decided to add in which are all pretty good I must say
 
 - **Auto-switching directions**: Morning outbound (Tuscolana → Muratella), Evening inbound (Muratella → Tuscolana)
