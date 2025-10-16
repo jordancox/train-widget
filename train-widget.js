@@ -328,24 +328,6 @@ async function createWidget() {
         }
     });
     
-    // Smart footer based on time and direction
-    widget.addSpacer();
-    let footerText;
-    
-    if (commuteInfo.direction === 'outbound' && hour >= 7 && hour < 10) {
-        footerText = "Morning peak - allow extra time";
-    } else if (hour >= EVENING_CUTOFF || hour < 6) {
-        footerText = "Limited night service";
-    } else {
-        footerText = `Auto-switches at ${MORNING_CUTOFF}:00`;
-    }
-    
-    const footer = widget.addText(footerText);
-    footer.textColor = Color.white();
-    footer.font = Font.systemFont(7);
-    footer.textOpacity = 0.6;
-    footer.centerAlignText();
-    
     return widget;
 }
 
