@@ -116,14 +116,20 @@ function processTrainData(data, commuteInfo) {
     
     const relevantTrains = data
         .filter(train => {
-            // Only future trains
-            const departureTime = train.orarioPartenza || 0;
-            if (departureTime <= now) {
+            // Calculate the best-known departure time (scheduled + delay fallback)
+            const scheduledDeparture = Number(train.orarioPartenza) || 0;
+            const delayMinutes = Number(train.ritardo ?? 0);
+            const effectiveDeparture = Number(train.orarioPartenzaEffettiva) || (scheduledDeparture + delayMinutes * 60000);
+            
+            // Skip services that have already left, even if they were delayed
+            if (effectiveDeparture <= now) {
                 return false;
             }
             
+            train._effectiveDeparture = effectiveDeparture;
+            
             // Log all trains to see what we're getting
-            console.log(`Train ${train.numeroTreno} to ${train.destinazione} at ${new Date(departureTime).toLocaleTimeString('it-IT')}`);
+            console.log(`Train ${train.numeroTreno} to ${train.destinazione} scheduled ${new Date(scheduledDeparture).toLocaleTimeString('it-IT')} effective ${new Date(effectiveDeparture).toLocaleTimeString('it-IT')}`);
             
             // Filter by relevant destinations for current direction
             const isRelevant = commuteInfo.relevantStations.some(station => 
@@ -136,7 +142,7 @@ function processTrainData(data, commuteInfo) {
             
             return isRelevant;
         })
-        .sort((a, b) => (a.orarioPartenza || 0) - (b.orarioPartenza || 0))
+        .sort((a, b) => (a._effectiveDeparture || 0) - (b._effectiveDeparture || 0))
         .slice(0, 4);
     
     console.log(`Found ${relevantTrains.length} relevant trains`);
