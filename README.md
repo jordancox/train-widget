@@ -25,6 +25,16 @@ Obviously, for several days, this widget was showing mock data that I was using 
 3. Customize the constants at the top of the file for your route
 4. Add widget to your home screen, except it'll only update once every 15-30 minutes unless you tap it, and when you tap it, it opens scriptable. It's better to use Shortcuts and call it that way (just make a shortcut that runs scriptable and calls the script, no other instructions), add it to your home screen, and you get it in a little pop-over window with a big 'done' button to make it go away. One tap to see it, one tap to close it.
 
+## Sync to Scriptable (macOS)
+
+Keep the repo copy of `train-widget.js` as your source of truth and push updates into Scriptable’s iCloud folder with the helper script:
+
+```bash
+./sync-to-scriptable.sh
+```
+
+That copies the latest widget into `~/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/` so Scriptable on iOS picks it up automatically.
+
 ## Configuration
 
 Edit the constants at the top of `train-widget.js` to customize for your route:
