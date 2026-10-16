@@ -4,8 +4,7 @@
 # (the ios-testflight skill). No pull_request trigger: secrets stay with runs Jordan starts.
 name: ios
 on:
-  push:
-    branches: [main]
+  push: # any branch, so a branch can be checked before it reaches main
     paths: ['ios/**', '.github/workflows/ios.yml']
   workflow_dispatch:
     inputs:
