@@ -28,7 +28,7 @@ const SECRET = env.TRENI_SECRET || '';
 const BUNDLE = env.BUNDLE_ID || 'org.jordancox.treni';
 const TICK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60;
 
-const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+const log = (...a) => console.log(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Rome' }), ...a); // Rome time, like everything else
 fs.mkdirSync(DATA, { recursive: true });
 
 const read = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
