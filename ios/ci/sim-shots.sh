@@ -19,7 +19,7 @@ print(sims[-1]["udid"] if sims else "")')
 xcrun simctl list devices | grep "$UDID"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null
-xcrun simctl status_bar "$UDID" override --time "$(TZ=Europe/Rome date +%H:%M)" --batteryState charged --batteryLevel 100 2>/dev/null || true
+xcrun simctl status_bar "$UDID" override --time 08:05 --batteryState charged --batteryLevel 100 2>/dev/null || true
 plutil -p "$APP/Info.plist" > "$OUT/info.txt" 2>&1 || true
 xcrun simctl install "$UDID" "$APP"
 shot() { xcrun simctl io "$UDID" screenshot "$OUT/$1.png" >/dev/null 2>&1; echo "shot $1"; }
@@ -34,4 +34,6 @@ launch settings-dark -demo -screen settings; sleep 5; shot settings-dark
 launch live -demo -live; sleep 6; shot app-live
 # Another app in front: the Live Activity moves to the Dynamic Island.
 xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null; sleep 4; shot island
+# The same over a map of Rome, for the promo sheet (promo/), if Maps opens without asking anything.
+xcrun simctl openurl "$UDID" "http://maps.apple.com/?ll=41.8902,12.4922&z=15" >/dev/null 2>&1 && sleep 10 && shot island-maps || true
 xcrun simctl terminate "$UDID" "$ID" || true

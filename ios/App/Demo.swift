@@ -1,17 +1,14 @@
 import ActivityKit
 import SwiftUI
 
-/// Sample trains for the simulator (-demo), timed from now so the countdowns run.
+/// Sample trains for the simulator (-demo), timed from now so the countdowns run, and shown as if it were
+/// `moment` (Fmt.shift): the morning trip to work.
 enum Demo {
+    /// Monday 19 October 2026, 08:05 in Rome (the simulator's status bar says 8:05 too: ci/sim-shots.sh).
+    static let moment: Double = 1_792_389_900
+
     static let home = Station(code: "S08408", name: "Roma Tuscolana", walk: 13)
     static let work = Station(code: "S08400", name: "Muratella", walk: 8)
-
-    /// The way a real day would go at Rome's time now: to work before 13:00, home after.
-    static var from: String {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "Europe/Rome")!
-        return cal.component(.hour, from: Date()) < 13 ? "home" : "work"
-    }
 
     static func trains(from: String, now: Double = Date().timeIntervalSince1970) -> [Train] {
         let toWork = from == "home"
@@ -59,17 +56,17 @@ enum Shots {
             renderer.scale = 3
             if let png = renderer.uiImage?.pngData() { try? png.write(to: dir.appendingPathComponent("\(name).png")) }
         }
-        let list = Demo.trains(from: Demo.from)
-        let s = Demo.content(from: Demo.from, trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Leave in 2:30"
-        let train = Demo.content(from: Demo.from, trains: list) // too late to walk it: counting to the train
+        let list = Demo.trains(from: "home")
+        let s = Demo.content(from: "home", trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Leave in 2:30"
+        let train = Demo.content(from: "home", trains: list) // too late to walk it: counting to the train
         var cancelled = list
         cancelled[0].cancelled = true
         save("lock", width: 370, lock(s))
         save("lock-home", width: 370, lock(Demo.content(from: "work", trains: Demo.trains(from: "work"))))
         save("lock-train", width: 370, lock(train))
         save("lock-stale", width: 370, lock(s, stale: true))
-        save("lock-cancelled", width: 370, lock(Demo.content(from: Demo.from, trains: cancelled)))
-        save("lock-empty", width: 370, lock(Demo.content(from: Demo.from, trains: [], note: "No trains in the next hour")))
+        save("lock-cancelled", width: 370, lock(Demo.content(from: "home", trains: cancelled)))
+        save("lock-empty", width: 370, lock(Demo.content(from: "home", trains: [], note: "No trains in the next hour")))
         save("island-expanded", width: 370,
              VStack(spacing: 6) {
                  HStack(alignment: .top) {
@@ -126,8 +123,9 @@ struct PromoLock: View {
                 .padding(.horizontal, 30)
                 .frame(height: 59)
                 .overlay(Capsule().fill(.black).frame(width: 126, height: 37))
-                Text(Promo.date(state.updated)).font(.system(size: 21, weight: .semibold)).opacity(0.85).padding(.top, 34)
-                Text(Fmt.hm(state.updated)).font(.system(size: 100, weight: .bold)).monospacedDigit().opacity(0.92)
+                Text(Promo.format("EEEE d MMMM", state.updated)).font(.system(size: 21, weight: .semibold)).opacity(0.85)
+                    .padding(.top, 34)
+                Text(Promo.format("H:mm", state.updated)).font(.system(size: 100, weight: .bold)).monospacedDigit().opacity(0.92)
                     .padding(.top, -10)
                 Spacer()
                 LockScreenView(state: state)
@@ -152,26 +150,27 @@ struct PromoWatch: View {
     let state: TrainAttributes.ContentState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(Fmt.hm(state.updated)).font(.system(size: 17, weight: .semibold, design: .rounded))
+        VStack(alignment: .leading, spacing: 0) {
+            Text(Promo.format("H:mm", state.updated)).font(.system(size: 17, weight: .semibold, design: .rounded))
                 .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 14).padding(.top, 10)
-            WatchView(state: state).padding(10).background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 24))
-            RoundedRectangle(cornerRadius: 24).fill(Color(white: 0.10)).frame(height: 60)
+            Spacer()
+            WatchView(state: state).padding(12).background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 24))
+            Spacer()
+            Spacer()
         }
         .padding(.horizontal, 6)
-        .frame(maxHeight: .infinity, alignment: .top)
         .background(.black)
         .foregroundStyle(.white)
     }
 }
 
 enum Promo {
-    static func date(_ seconds: Double) -> String {
+    static func format(_ pattern: String, _ seconds: Double) -> String {
         let f = DateFormatter()
-        f.dateFormat = "EEEE d MMMM"
+        f.dateFormat = pattern
         f.locale = Locale(identifier: "en_GB")
         f.timeZone = TimeZone(identifier: "Europe/Rome")
-        return f.string(from: Date(timeIntervalSince1970: seconds))
+        return f.string(from: Date(timeIntervalSince1970: seconds + Fmt.shift))
     }
 
     static func roundButton(_ symbol: String) -> some View {

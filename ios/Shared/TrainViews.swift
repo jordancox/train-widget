@@ -22,7 +22,11 @@ enum Fmt {
         return f
     }()
 
-    static func hm(_ seconds: Double) -> String { formatter.string(from: Date(timeIntervalSince1970: seconds)) }
+    /// Added to every time shown. Only the simulator's demo sets it, so its pictures read Monday 08:05 whenever they
+    /// are taken (the countdowns still run on the real clock).
+    static var shift: Double = 0
+
+    static func hm(_ seconds: Double) -> String { formatter.string(from: Date(timeIntervalSince1970: seconds + shift)) }
 
     /// "Roma Tuscolana" → "Tuscolana": every station here is in Rome and the lock screen has little room.
     static func short(_ name: String) -> String {
