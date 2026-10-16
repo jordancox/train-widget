@@ -2,6 +2,8 @@ import SwiftUI
 
 // The Live Activity's views: the lock screen, the Dynamic Island's pieces and the Watch. They live here, outside the
 // widget extension, so the app can show the same thing (its preview, and the CI's pictures of them).
+// Few numbers on purpose (Jordan, 16 Oct 2026: "there are so many numbers there"): the countdown, the time and how
+// late, the platform, and the one train after. No arrival time, and no "updated" unless the data has gone stale.
 
 enum Board {
     /// A departure board's dark blue.
@@ -28,18 +30,20 @@ enum Fmt {
 
 extension Train {
     var statusColor: Color { cancelled || delay >= 5 ? .red : delay > 0 ? .orange : .green }
-    var statusText: String { cancelled ? "cancelled" : delay > 0 ? "+\(delay)" : "on time" }
+    /// "on time", "2 min late", "cancelled"
+    var statusText: String { cancelled ? "cancelled" : delay > 0 ? "\(delay) min late" : "on time" }
 
-    /// "Platform 5 · arrives 09:32"
-    var detailLine: String {
+    /// The app's list has room for more: "Platform 5 · at Tuscolana 10:07"
+    func detailLine(to: String) -> String {
         var parts: [String] = []
         if let plat { parts.append("Platform \(plat)") }
-        if let arr { parts.append("arrives \(Fmt.hm(arr))") }
+        if let arr { parts.append("at \(to) \(Fmt.hm(arr))") }
         return parts.isEmpty ? dest : parts.joined(separator: " · ")
     }
 }
 
 /// Minutes and seconds to the expected departure. The phone ticks it by itself between the server's updates.
+/// (A whole-minutes countdown that ticks by itself isn't reliable in a Live Activity on iOS 18.)
 struct Countdown: View {
     let train: Train
     /// When the data was fetched: the timer's range has to start no later than its end.
@@ -65,23 +69,19 @@ struct DelayBadge: View {
     }
 }
 
-/// "Then 09:22 · 09:37 +3"
+/// "Then 17:57", "Then 17:57 4 min late": only the train after the next one.
 struct ThenLine: View {
-    let trains: [Train]
+    let train: Train
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 4) {
             Text("Then").foregroundStyle(.secondary)
-            ForEach(trains) { t in
-                HStack(spacing: 3) {
-                    Text(Fmt.hm(t.dep)).fontWeight(.semibold).monospacedDigit().strikethrough(t.cancelled)
-                    if t.cancelled || t.delay > 0 {
-                        Text(t.cancelled ? "✕" : "+\(t.delay)").fontWeight(.bold).foregroundStyle(t.statusColor)
-                    }
-                }
+            Text(Fmt.hm(train.dep)).fontWeight(.semibold).monospacedDigit().strikethrough(train.cancelled)
+            if train.cancelled || train.delay > 0 {
+                Text(train.statusText).fontWeight(.semibold).foregroundStyle(train.statusColor)
             }
-            Spacer(minLength: 0)
         }
         .font(.caption)
+        .lineLimit(1)
     }
 }
 
@@ -91,36 +91,35 @@ struct LockScreenView: View {
     var stale = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "tram.fill").foregroundStyle(Board.accent)
-                Text("\(state.from) → \(state.to)").font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text("To \(state.to)").font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
-                Text(stale ? "Not updated since \(Fmt.hm(state.updated))" : "Updated \(Fmt.hm(state.updated))")
-                    .font(.caption2)
-                    .foregroundStyle(stale ? Color.orange : Color.secondary)
+                if let plat = state.trains.first?.plat {
+                    Text("Platform \(plat)").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                }
             }
             if let t = state.trains.first {
-                HStack(alignment: .center) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(Fmt.hm(t.dep))
-                                .font(.system(size: 30, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .strikethrough(t.cancelled)
-                            DelayBadge(train: t)
+                HStack(alignment: .bottom) {
+                    if t.cancelled {
+                        Text("Cancelled").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.red)
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Leaves in").font(.caption).foregroundStyle(.secondary)
+                            Countdown(train: t, updated: state.updated)
+                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .frame(maxWidth: 130, alignment: .leading)
                         }
-                        Text(t.detailLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer(minLength: 8)
-                    if t.cancelled {
-                        Text("Cancelled").font(.title3.weight(.bold)).foregroundStyle(.red)
-                    } else {
-                        Countdown(train: t, updated: state.updated)
-                            .font(.system(size: 30, weight: .semibold, design: .rounded))
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 110, alignment: .trailing)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(Fmt.hm(t.dep)).font(.title3.weight(.semibold)).monospacedDigit().strikethrough(t.cancelled)
+                        if !t.cancelled {
+                            Text(t.statusText).font(.caption.weight(.semibold)).foregroundStyle(t.statusColor)
+                        }
                     }
+                    .padding(.bottom, 4)
                 }
             } else {
                 Text(state.note ?? "No trains right now").font(.headline)
@@ -128,8 +127,14 @@ struct LockScreenView: View {
             if let note = state.note, !state.trains.isEmpty {
                 Text(note).font(.caption).foregroundStyle(.orange)
             }
-            if state.trains.count > 1 {
-                ThenLine(trains: Array(state.trains.dropFirst()))
+            if state.trains.count > 1 || stale {
+                HStack {
+                    if state.trains.count > 1 { ThenLine(train: state.trains[1]) }
+                    Spacer(minLength: 4)
+                    if stale {
+                        Text("Not updated since \(Fmt.hm(state.updated))").font(.caption2).foregroundStyle(.orange)
+                    }
+                }
             }
         }
         .padding(14)
@@ -142,12 +147,9 @@ struct LockScreenView: View {
 struct IslandCompactLeading: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "tram.fill")
-            if let plat = state.trains.first?.plat { Text(plat).fontWeight(.bold) }
-        }
-        .font(.caption)
-        .foregroundStyle(Board.accent)
+        Image(systemName: "tram.fill")
+            .font(.caption)
+            .foregroundStyle(Board.accent)
     }
 }
 
@@ -187,9 +189,9 @@ struct IslandExpandedLeading: View {
     let state: TrainAttributes.ContentState
     var body: some View {
         if let t = state.trains.first {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(Fmt.hm(t.dep)).font(.title2.weight(.bold)).monospacedDigit().strikethrough(t.cancelled)
-                DelayBadge(train: t)
+                Text(t.statusText).font(.caption.weight(.semibold)).foregroundStyle(t.statusColor)
             }
             .padding(.leading, 4)
         }
@@ -203,11 +205,14 @@ struct IslandExpandedTrailing: View {
             if t.cancelled {
                 Text("Cancelled").font(.headline).foregroundStyle(.red)
             } else {
-                Countdown(train: t, updated: state.updated)
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 90, alignment: .trailing)
-                    .padding(.trailing, 4)
+                VStack(alignment: .trailing, spacing: 0) {
+                    Countdown(train: t, updated: state.updated)
+                        .font(.title2.weight(.semibold))
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 90, alignment: .trailing)
+                    Text("to go").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.trailing, 4)
             }
         }
     }
@@ -216,7 +221,7 @@ struct IslandExpandedTrailing: View {
 struct IslandExpandedCenter: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        Text("\(state.from) → \(state.to)").font(.caption.weight(.semibold)).lineLimit(1)
+        Text("To \(state.to)").font(.caption.weight(.semibold)).lineLimit(1)
     }
 }
 
@@ -225,12 +230,17 @@ struct IslandExpandedBottom: View {
     var stale = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if let t = state.trains.first {
-                Text(t.detailLine).font(.caption).foregroundStyle(.secondary)
-            } else {
+            if state.trains.isEmpty {
                 Text(state.note ?? "No trains right now").font(.caption)
+            } else {
+                HStack {
+                    if let plat = state.trains.first?.plat {
+                        Text("Platform \(plat)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    if state.trains.count > 1 { ThenLine(train: state.trains[1]) }
+                }
             }
-            if state.trains.count > 1 { ThenLine(trains: Array(state.trains.dropFirst())) }
             if stale {
                 Text("Not updated since \(Fmt.hm(state.updated))").font(.caption2).foregroundStyle(.orange)
             }
@@ -248,19 +258,20 @@ struct WatchView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Image(systemName: "tram.fill").foregroundStyle(Board.accent)
-                Text("→ \(state.to)").font(.caption2.weight(.semibold)).lineLimit(1)
+                Text("To \(state.to)").font(.caption2.weight(.semibold)).lineLimit(1)
             }
             if let t = state.trains.first {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(Fmt.hm(t.dep)).font(.headline).monospacedDigit().strikethrough(t.cancelled)
-                    Text(t.statusText).font(.caption2.weight(.bold)).foregroundStyle(t.statusColor)
-                }
                 if t.cancelled {
                     Text("Cancelled").font(.title3.weight(.bold)).foregroundStyle(.red)
                 } else {
                     Countdown(train: t, updated: state.updated).font(.title3.weight(.bold))
                 }
-                Text(t.plat.map { "Platform \($0)" } ?? t.dest).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(Fmt.hm(t.dep)).monospacedDigit().strikethrough(t.cancelled)
+                    if !t.cancelled { Text(t.statusText).foregroundStyle(t.statusColor) }
+                }
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
             } else {
                 Text(state.note ?? "No trains").font(.caption)
             }

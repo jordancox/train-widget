@@ -68,7 +68,7 @@ struct ContentView: View {
             if snap.trains.isEmpty {
                 Text(snap.content.note ?? "No trains in the next hour").foregroundStyle(.secondary)
             }
-            ForEach(snap.trains) { TrainRow(train: $0, now: snap.now) }
+            ForEach(snap.trains) { TrainRow(train: $0, to: snap.content.to, now: snap.now) }
         } footer: {
             Text("Trains that stop at both stations, from Viaggiatreno. Updated \(Fmt.hm(snap.now)).")
         }
@@ -123,6 +123,7 @@ struct ContentView: View {
 
 struct TrainRow: View {
     let train: Train
+    let to: String
     let now: Double
 
     var body: some View {
@@ -132,7 +133,7 @@ struct TrainRow: View {
                     Text(Fmt.hm(train.dep)).font(.title3.weight(.bold)).monospacedDigit().strikethrough(train.cancelled)
                     DelayBadge(train: train)
                 }
-                Text(train.detailLine).font(.subheadline).foregroundStyle(.secondary)
+                Text(train.detailLine(to: to)).font(.subheadline).foregroundStyle(.secondary)
                 Text("\(train.dest) · \(train.n)").font(.caption).foregroundStyle(.tertiary)
             }
             Spacer()
