@@ -13,7 +13,6 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     CODE_SIGN_STYLE: Automatic
-    TARGETED_DEVICE_FAMILY: "1"
 targets:
   Treni:
     type: application
@@ -49,6 +48,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.jordancox.treni
         PRODUCT_NAME: Treni
+        # iPhone only, set on each target: XcodeGen's iOS preset puts "1,2" here, over any project-wide value, and
+        # Apple refuses an iPad app that only turns upright.
+        TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         TRENI_SERVER: "https://treni.jordancox.org"
@@ -71,5 +73,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.jordancox.treni.live
         PRODUCT_NAME: TreniLive
+        TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO

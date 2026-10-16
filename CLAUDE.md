@@ -35,8 +35,15 @@ times and keeps up to date. Public repo (`jordancox/train-widget`): never commit
 - The content-state's fields must match `ios/Shared/TrainAttributes.swift` and `server/lib/schedule.mjs`
   (`liveContent`) exactly; times are Unix seconds.
 
-## Apple and Cloudflare pieces (done by Jordan, 16 Oct 2026)
+## Apple and Cloudflare pieces (all done 16 Oct 2026)
 
-App ID `org.jordancox.treni` registered with push by Claude through the API. Jordan's to-dos were: an APNs key
-(developer.apple.com → Keys, "Treni push", .p8 to `~/.config/apple/`), Broadcast Capability ticked on the App ID,
-the App Store Connect record, and the tunnel route. Update this section with what's actually done.
+- App ID `org.jordancox.treni` (+ `.live`), registered with push by Claude through the API. Broadcast Capability
+  ticked on it by Jordan.
+- APNs key **Q8JU8V9YFU** ("Treni push", Production, Team Scoped), at `~/.config/apple/AuthKey_Q8JU8V9YFU.p8`, named
+  in `~/.config/treni/env`. Apple made the home and work channels with it (ids in `~/.local/share/treni/state.json`),
+  and a test broadcast got 200 from both `api.push.apple.com` and `api-broadcast.push.apple.com`.
+- App Store Connect record "Treni Jordan" (app id 6823608242, SKU `treni`). Only Jordan sees it: the other user
+  on the team (Marketing role) sees Super Lettore only.
+- Tunnel route: treni.jordancox.org → `http://localhost:8795`, a published application route with no Access.
+- GitHub secrets on the repo: the ASC key, the shared dev certificate, the team, and `TRENI_SECRET` (set by Jordan
+  with the skill's `set-secrets.sh`).
