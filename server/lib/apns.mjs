@@ -21,8 +21,8 @@ export class APNs {
     this.teamId = teamId;
     this.push = sandbox ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com';
     this.manage = sandbox ? 'https://api-manage-broadcast.sandbox.push.apple.com:2195' : 'https://api-manage-broadcast.push.apple.com:2196';
-    // Apple's broadcast page names api.push.apple.com in its text and api-broadcast.* in its example; try the
-    // first and fall back to the second once if it refuses.
+    // Apple's broadcast page names api.push.apple.com in its text and api-broadcast.* in its example. Both answered
+    // 200 on 16 Oct 2026; try the first and fall back to the second once if it refuses.
     this.broadcastHosts = sandbox
       ? ['https://api.sandbox.push.apple.com', 'https://api-broadcast.sandbox.push.apple.com']
       : ['https://api.push.apple.com', 'https://api-broadcast.push.apple.com'];
