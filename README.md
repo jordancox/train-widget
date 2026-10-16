@@ -1,5 +1,11 @@
 # Get Quick Italian Train Times via Scriptable on iOS
 
+> **Oct 2026: now a Live Activity.** `ios/` is a small iPhone app, **Treni**, and `server/` runs on my home server.
+> On weekday mornings and evenings the next three trains (only ones that actually stop at both stations), their
+> delay, platform and arrival time, with a ticking countdown, turn up on the lock screen, in the Dynamic Island and
+> on the Watch by themselves, and keep themselves up to date. The app sets the stations and times. The Scriptable
+> script below still works, and no longer shows made-up trains when it can't get real ones.
+
 <img width="660" height="470" alt="Screenshot 2025-09-24 at 14 13 43" src="https://github.com/user-attachments/assets/0554a3f6-27bd-41ff-8c0c-0df64fc7a0be" />
 
 I take the train to work in Rome. It's six taps to open the Trenitalia app, get the station status I want, then get a list of all the trains going through that station, and then I have to spot mine in the list. Wanted to take that down to one fast tap when I'm on my way out of the apartment in the morning, or checking when I need to leave my desk at work.
@@ -16,7 +22,7 @@ Obviously, for several days, this widget was showing mock data that I was using 
 - **Live train data**: Real-time departures from Viaggiatreno API
 - **Smart urgency indicators**: Color-coded trains based on departure time
 - **Peak hour awareness**: Shows relevant messaging during rush hours
-- **Fallback mock data**: Works even when API is unavailable
+- ~~**Fallback mock data**: Works even when API is unavailable~~ Removed: showing made-up trains is how I missed trains. It now says when it can't get the real ones.
 
 ## Installation
 
@@ -43,7 +49,7 @@ Edit the constants at the top of `train-widget.js` to customize for your route:
 // Station codes
 const TUSCOLANA_CODE = 'S08408'; // Roma Tuscolana
 const MURATELLA_CODE = 'S08400'; // Muratella
-const FIUMICINO_CODE = 'S08000'; // Fiumicino Aeroporto
+const FIUMICINO_CODE = 'S08411'; // Fiumicino Aeroporto
 
 // Schedule configuration
 const MORNING_CUTOFF = 14; // 2 PM - switch to evening schedule after this hour
@@ -54,15 +60,18 @@ const EVENING_CUTOFF = 22; // 10 PM - back to morning schedule after this
 
 ### Finding Station Codes
 
-Common Roman station codes:
+Common Roman station codes (checked against Viaggiatreno in Oct 2026; the earlier list was mostly wrong):
 - `S08408` - Roma Tuscolana
 - `S08400` - Muratella
-- `S08409` - Roma Ostiense
-- `S08501` - Roma Trastevere
-- `S08500` - Roma Termini
-- `S08000` - Fiumicino Aeroporto
+- `S08406` - Roma Ostiense
+- `S08405` - Roma Trastevere
+- `S08409` - Roma Termini
+- `S08217` - Roma Tiburtina
+- `S08411` - Fiumicino Aeroporto
 
 You can find more station codes by checking the official Viaggiatreno website or using the URL pattern in a browser to test different codes, says Claude. I don't know? You can try it out.
+
+(Claude again, a year later: `http://www.viaggiatreno.it/infomobilitamobile/resteasy/viaggiatreno/autocompletaStazione/ROMA%20TUS` lists every station whose name starts that way, with its code.)
 
 ## Train Status Indicators
 

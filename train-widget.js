@@ -1,14 +1,18 @@
 // Roma Tuscolana Commuter Widget
 // Automatically switches between morning (outbound) and evening (return) schedules
+// Superseded by the Treni app and its Live Activity (ios/, server/); kept working until that's on the phone.
 
 // Station codes
 const TUSCOLANA_CODE = 'S08408'; // Roma Tuscolana
 const MURATELLA_CODE = 'S08400'; // Muratella (CORRECTED)
-const FIUMICINO_CODE = 'S08000'; // Fiumicino Aeroporto
+const FIUMICINO_CODE = 'S08411'; // Fiumicino Aeroporto
 
 // Schedule configuration
 const MORNING_CUTOFF = 14; // 2 PM - switch to evening schedule after this hour
 const EVENING_CUTOFF = 22; // 10 PM - back to morning schedule after this
+
+// Set when the live data couldn't be fetched, so the widget says so instead of showing anything made up.
+let lastError = null;
 
 // Your route stations for filtering
 const AIRPORT_LINE_STATIONS = [
@@ -26,6 +30,7 @@ const AIRPORT_LINE_STATIONS = [
 const CITY_STATIONS = [
     'ORTE',
     'FARA SABINA',
+    'POGGIO MIRTETO',
     'ROMA TERMINI',
     'ROMA TIBURTINA',
     'ROMA OSTIENSE'
@@ -94,20 +99,23 @@ async function getTrains(commuteInfo) {
             }
             return processTrainData(data, commuteInfo);
         } catch (jsonError) {
+            // Never show made-up trains: say the data is missing instead (Oct 2026).
             console.log('JSON parse error:', jsonError.message);
-            return getMockTrains(commuteInfo);
+            lastError = 'Viaggiatreno sent something unreadable';
+            return [];
         }
     } catch (e) {
         console.error('API Error:', e.message);
-        console.log('Using mock data due to error');
-        return getMockTrains(commuteInfo);
+        lastError = "Couldn't reach Viaggiatreno";
+        return [];
     }
 }
 
 function processTrainData(data, commuteInfo) {
     if (!data || !Array.isArray(data)) {
         console.log('Invalid data format - not an array');
-        return getMockTrains(commuteInfo);
+        lastError = 'Viaggiatreno sent something unreadable';
+        return [];
     }
     
     console.log(`Processing ${data.length} trains for ${commuteInfo.direction} direction`);
@@ -148,69 +156,11 @@ function processTrainData(data, commuteInfo) {
     console.log(`Found ${relevantTrains.length} relevant trains`);
     
     if (relevantTrains.length === 0) {
-        console.log('No relevant trains found, using mock data');
+        console.log('No relevant trains found');
         console.log('Looking for destinations:', commuteInfo.relevantStations);
     }
     
-    return relevantTrains.length > 0 ? relevantTrains : getMockTrains(commuteInfo);
-}
-
-function getMockTrains(commuteInfo) {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    
-    const trains = [];
-    let nextDeparture = new Date(now);
-    
-    // FL1 schedule varies by direction and time
-    let schedule;
-    if (commuteInfo.direction === 'outbound') {
-        // Morning outbound from Tuscolana: more frequent during peak
-        schedule = currentHour >= 7 && currentHour < 10 ? 
-            [7, 22, 37, 52] : [7, 27, 47]; // Every 15min peak, 20min off-peak
-    } else {
-        // Evening inbound from Muratella: frequent during evening peak
-        // Based on your actual times: 16:58, 17:13, etc
-        schedule = currentHour >= 17 && currentHour < 20 ? 
-            [13, 28, 43, 58] : [13, 33, 53]; // Every 15min peak, 20min off-peak
-    }
-    
-    let nextMinute = schedule.find(min => min > currentMinute);
-    if (!nextMinute) {
-        nextDeparture.setHours(currentHour + 1);
-        nextMinute = schedule[0];
-    }
-    
-    nextDeparture.setMinutes(nextMinute, 0, 0);
-    
-    // Generate realistic trains
-    const baseTrainNumber = commuteInfo.direction === 'outbound' ? 3270 : 3271;
-    const destination = commuteInfo.direction === 'outbound' ? 
-        'FIUMICINO AEROPORTO' : 'ORTE'; // Evening trains from Muratella go to Orte
-    
-    for (let i = 0; i < 4; i++) {
-        const interval = schedule.length === 4 ? 15 : 20; // minutes between trains
-        const trainTime = new Date(nextDeparture.getTime() + (i * interval * 60000));
-        const trainNumber = `FL1 ${baseTrainNumber + (i * 2)}`;
-        
-        // Realistic delays based on direction and time
-        const isPeakHour = (commuteInfo.direction === 'outbound' && trainTime.getHours() >= 7 && trainTime.getHours() <= 9) ||
-                          (commuteInfo.direction === 'inbound' && trainTime.getHours() >= 17 && trainTime.getHours() <= 19);
-        
-        const delayChance = isPeakHour ? 0.4 : 0.2;
-        const delay = Math.random() < delayChance ? Math.floor(Math.random() * 8) + 1 : 0;
-        
-        trains.push({
-            numeroTreno: trainNumber,
-            destinazione: destination,
-            orarioPartenza: trainTime.getTime(),
-            ritardo: delay,
-            tipoTreno: 'PG'
-        });
-    }
-    
-    return trains;
+    return relevantTrains;
 }
 
 function getUrgencyLevel(minutesUntil, delay) {
@@ -277,7 +227,7 @@ async function createWidget() {
     const trains = await getTrains(commuteInfo);
     
     if (trains.length === 0) {
-        const noData = widget.addText("No trains scheduled");
+        const noData = widget.addText(lastError || "No trains in the next hour");
         noData.textColor = Color.white();
         noData.font = Font.systemFont(11);
         return widget;

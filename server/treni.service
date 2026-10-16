@@ -1,0 +1,15 @@
+[Unit]
+Description=Treni: the iPhone's train Live Activity (treni.jordancox.org via the Cloudflare tunnel)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /home/jordan/projects/train-widget/server/treni.mjs
+# TRENI_SECRET, APPLE_TEAM_ID, BUNDLE_ID, APNS_KEY_ID, APNS_KEY_PATH (mode 600, never in the repo)
+EnvironmentFile=/home/jordan/.config/treni/env
+Restart=on-failure
+RestartSec=5
+Nice=10
+MemoryMax=200M
+
+[Install]
+WantedBy=default.target
