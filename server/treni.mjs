@@ -5,8 +5,9 @@
 // there, so every /api call carries the shared secret instead).
 //
 // In a window (settings.windows, Rome time) it starts the Live Activity on the phone by itself (push-to-start,
-// subscribed to that direction's broadcast channel), checks the trains every 45 seconds, pushes when something
-// changes (and every 4 minutes anyway, so the phone knows it's fresh), and ends it when the window closes.
+// subscribed to that direction's broadcast channel), checks the trains every 45 seconds (every 15 around the time
+// to set off and the departure), pushes when something changes (and every 4 minutes anyway, so the phone knows
+// it's fresh), and ends it when the window closes.
 // The app can also start one by hand (POST /api/live), stop it (DELETE /api/live) or skip today.
 //
 //   node treni.mjs           the server
@@ -26,7 +27,7 @@ const PORT = +(env.PORT || 8795);
 const DATA = env.DATA_DIR || path.join(os.homedir(), '.local/share/treni');
 const SECRET = env.TRENI_SECRET || '';
 const BUNDLE = env.BUNDLE_ID || 'org.jordancox.treni';
-const TICK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60;
+const TICK = 15e3, CHECK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60;
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Rome' }), ...a); // Rome time, like everything else
 fs.mkdirSync(DATA, { recursive: true });
@@ -50,7 +51,7 @@ const cache = new Map();
 async function trains(from) {
   const a = settings[from], b = settings[other(from)];
   const key = `${a.code}>${b.code}`, hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 20e3) return hit.trains;
+  if (hit && Date.now() - hit.at < 10e3) return hit.trains;
   const list = await journeys(a.code, b.code);
   cache.set(key, { at: Date.now(), trains: list });
   return list;
@@ -118,12 +119,21 @@ async function endLive(why) {
   log(`ended (${why}) after ${live.pushes} pushes`, r.status === 200 ? '' : `— refused ${r.status} ${JSON.stringify(r.body)}`);
 }
 
-let ticking = false;
+// Every 45 s, but every 15 s around the time to set off and the departure itself, so "Leave in" turns into
+// "Leaves in", and a train that has left goes, without waiting.
+const busy = (c, now) => {
+  const t = c?.trains?.[0], s = now / 1000;
+  return !!t && [t.exp - (c.walk || 0) * 60, t.exp].some(x => s > x - 90 && s < x + 180);
+};
+let ticking = false, checked = 0;
 async function tick() {
   if (ticking) return;
+  const now = Date.now();
+  if (now - checked < CHECK - 1e3 && !(state.live && busy(state.live.last, now))) return;
   ticking = true;
+  checked = now;
   try {
-    const now = Date.now(), w = dueWindow(settings, now), today = rome(now).date;
+    const w = dueWindow(settings, now), today = rome(now).date;
     if (w) {
       const key = `${today}/${w.id}`;
       if (state.live?.from === w.from) {

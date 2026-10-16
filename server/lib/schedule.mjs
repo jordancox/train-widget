@@ -62,6 +62,10 @@ export function liveContent({ from, to, trains, now = Date.now(), note }) {
   };
   if (note) state.note = note;
   else if (!trains.length) state.note = 'No trains in the next hour';
+  // Minutes from setting off to standing on the platform (Settings, per station). While there's still time to set
+  // off for the first train, the phone counts down to then ("Leave in"); after that, to the train itself.
+  const walk = from.walk || 0, first = state.trains[0];
+  if (walk && first && !first.cancelled && now / 1000 < first.exp - walk * 60) state.walk = walk;
   return state;
 }
 
@@ -73,7 +77,7 @@ export function change(prev, next) {
   if (!prev) return 'high';
   const a = prev.trains[0], b = next.trains[0];
   if (!a || !b || a.n !== b.n || a.delay !== b.delay || a.plat !== b.plat || a.cancelled !== b.cancelled) return 'high';
-  if (prev.note !== next.note) return 'high';
+  if (Math.abs(a.exp - b.exp) >= 60 || prev.walk !== next.walk || prev.note !== next.note) return 'high';
   return 'low';
 }
 
@@ -91,7 +95,8 @@ export function startAlert(state) {
 }
 
 export function validSettings(s) {
-  const st = x => x && /^S\d{5}$/.test(x.code) && typeof x.name === 'string' && x.name.length < 80;
+  const st = x => x && /^S\d{5}$/.test(x.code) && typeof x.name === 'string' && x.name.length < 80 &&
+    (x.walk === undefined || (Number.isInteger(x.walk) && x.walk >= 0 && x.walk <= 60));
   const time = x => typeof x === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(x);
   if (!s || !st(s.home) || !st(s.work) || !Array.isArray(s.windows) || s.windows.length > 6) return false;
   for (const w of s.windows) {

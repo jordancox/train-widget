@@ -47,6 +47,22 @@ function remember(key) {
 // the opposite direction (which passes `to` first) and branches that never reach `to` drop out by themselves.
 // Trains about to leave, or just past their time, are checked against their own run (andamentoTreno): the board
 // keeps a train for about 10 minutes after it has gone, and its run says when it actually left.
+// When a train should leave station `code`, in Unix seconds, from its own run: if it's standing there, half a minute
+// after it pulled in (and not before its time); otherwise the last stop before where it was logged (to the half
+// minute) plus the timetable's time from there. Null if it hasn't been logged anywhere before `code`.
+export function estimate(run, code) {
+  const stops = run?.fermate || [];
+  const i = stops.findIndex(f => f.id === code);
+  const here = stops[i];
+  if (!here?.partenza_teorica) return null;
+  if (here.arrivoReale) return Math.max(here.partenza_teorica, here.arrivoReale + 30e3) / 1000;
+  for (let j = i - 1; j >= 0; j--) {
+    const f = stops[j], real = f.partenzaReale || f.arrivoReale;
+    if (real && f.partenza_teorica) return Math.max(here.partenza_teorica, real + here.partenza_teorica - f.partenza_teorica) / 1000;
+  }
+  return null;
+}
+
 export async function journeys(from, to, now = Date.now(), api = { departures, arrivals, progress }) {
   const [deps, arrs] = await Promise.all([api.departures(from, now), api.arrivals(to, now)]);
   const arrBy = new Map(arrs.map(a => [`${a.numeroTreno}/${a.dataPartenzaTreno}`, a]));
@@ -80,15 +96,23 @@ export async function journeys(from, to, now = Date.now(), api = { departures, a
     if (t.exp < nowS - 20 * 60) continue; // long gone
     const key = `${from}/${t.n}/${t.date}`;
     if (gone.has(key)) continue;
-    if (t.exp < nowS + 5 * 60 && !t.cancelled) {
+    if (t.exp < nowS + 20 * 60 && !t.cancelled) {
       try {
         const run = await api.progress(t.origin, t.n, t.date);
         const stopA = run.fermate?.find(f => f.id === from);
         const stopB = run.fermate?.find(f => f.id === to);
         if (stopA?.partenzaReale) { remember(key); continue; } // it has left
         if (stopA?.actualFermataType === 3 || stopB?.actualFermataType === 3 || run.provvedimento === 1) t.cancelled = true;
-        const delay = Math.max(t.delay, run.ritardo ?? 0);
-        if (delay !== t.delay) { t.delay = delay; t.exp = t.dep + delay * 60; t.arr = t.arrSched + delay * 60; }
+        const est = estimate(run, from);
+        if (est) {
+          // Closer than the whole-minute delay: train 20693 on 16 Oct 2026 showed +4 and left 3 late.
+          t.exp = Math.max(t.dep, est);
+          t.delay = Math.floor((t.exp - t.dep) / 60);
+          t.arr = t.arrSched + (t.exp - t.dep);
+        } else {
+          const delay = Math.max(t.delay, run.ritardo ?? 0);
+          if (delay !== t.delay) { t.delay = delay; t.exp = t.dep + delay * 60; t.arr = t.arrSched + delay * 60; }
+        }
         if (stopA?.binarioEffettivoPartenzaDescrizione?.trim()) t.plat = stopA.binarioEffettivoPartenzaDescrizione.trim();
       } catch {
         if (t.exp < nowS - 2 * 60) continue; // can't ask: assume it left a couple of minutes after its time

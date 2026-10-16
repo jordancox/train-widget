@@ -48,6 +48,8 @@ struct OK: Decodable { var ok: Bool? }
 struct Station: Codable, Hashable {
     var code: String
     var name: String
+    /// Minutes from setting off to standing on this station's platform (Settings).
+    var walk: Int? = nil
 }
 
 struct TripWindow: Codable, Hashable, Identifiable {

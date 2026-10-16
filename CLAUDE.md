@@ -32,6 +32,14 @@ times and keeps up to date. Public repo (`jordancox/train-widget`): never commit
   re-reads the trains and broadcasts when something changes (priority 10 if it changes what you'd do, 5 otherwise),
   plus every 4 min so the stale date moves on; it ends the activity when the window closes. The countdown ticks on
   the phone by itself. The app can start one by hand, stop it, or skip today.
+- **Walk time** (Settings, per station: home 13, work 8 minutes, from Jordan's guess on 16 Oct 2026): while there's
+  still time to set off for the first train, the content-state carries `walk` and the countdown is to when to
+  leave ("Leave in"); after that the server drops it and the countdown is to the train ("Train leaves in"). Around
+  both moments the server checks every 15 s instead of 45.
+- **Expected times**: Viaggiatreno's delay is whole minutes and lags, so for trains due within 20 minutes the
+  server takes the train's own run instead: half a minute after it pulled in if it's at the platform, otherwise
+  its last logged stop (to the half minute) plus the timetable from there (`estimate()` in `lib/viaggiatreno.mjs`).
+  First evening: train 20693 showed +4 and left 3 late.
 - The content-state's fields must match `ios/Shared/TrainAttributes.swift` and `server/lib/schedule.mjs`
   (`liveContent`) exactly; times are Unix seconds.
 

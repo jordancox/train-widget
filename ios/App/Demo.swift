@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Sample trains for the simulator (-demo), timed from now so the countdowns run.
 enum Demo {
-    static let home = Station(code: "S08408", name: "Roma Tuscolana")
-    static let work = Station(code: "S08400", name: "Muratella")
+    static let home = Station(code: "S08408", name: "Roma Tuscolana", walk: 13)
+    static let work = Station(code: "S08400", name: "Muratella", walk: 8)
 
     static func trains(from: String, now: Double = Date().timeIntervalSince1970) -> [Train] {
         let toWork = from == "home"
@@ -19,9 +19,10 @@ enum Demo {
                 train("20439", inMinutes: 66, delay: 1)]
     }
 
-    static func content(from: String, trains: [Train], now: Double = Date().timeIntervalSince1970, note: String? = nil) -> TrainAttributes.ContentState {
+    static func content(from: String, trains: [Train], now: Double = Date().timeIntervalSince1970, note: String? = nil,
+                        walk: Int? = nil) -> TrainAttributes.ContentState {
         let (a, b) = from == "home" ? (home, work) : (work, home)
-        return .init(from: Fmt.short(a.name), to: Fmt.short(b.name), trains: Array(trains.prefix(3)), updated: now, note: note)
+        return .init(from: Fmt.short(a.name), to: Fmt.short(b.name), trains: Array(trains.prefix(3)), updated: now, note: note, walk: walk)
     }
 
     static func snapshot(from: String) -> Snapshot {
@@ -52,11 +53,13 @@ enum Shots {
             if let png = renderer.uiImage?.pngData() { try? png.write(to: dir.appendingPathComponent("\(name).png")) }
         }
         let list = Demo.trains(from: "home")
-        let s = Demo.content(from: "home", trains: list)
+        let s = Demo.content(from: "home", trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Leave in 2:30"
+        let train = Demo.content(from: "home", trains: list) // too late to walk it: counting to the train
         var cancelled = list
         cancelled[0].cancelled = true
         save("lock", width: 370, lock(s))
         save("lock-home", width: 370, lock(Demo.content(from: "work", trains: Demo.trains(from: "work"))))
+        save("lock-train", width: 370, lock(train))
         save("lock-stale", width: 370, lock(s, stale: true))
         save("lock-cancelled", width: 370, lock(Demo.content(from: "home", trains: cancelled)))
         save("lock-empty", width: 370, lock(Demo.content(from: "home", trains: [], note: "No trains in the next hour")))

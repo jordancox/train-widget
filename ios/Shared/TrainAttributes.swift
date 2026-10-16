@@ -14,6 +14,9 @@ struct TrainAttributes: ActivityAttributes {
         var updated: Double
         /// Shown when there's nothing better to say ("No trains in the next hour").
         var note: String?
+        /// Minutes from setting off to standing on the platform, sent only while there's still time to set off for
+        /// the first train: the countdown is then to when to leave ("Leave in"), not to the train.
+        var walk: Int?
     }
 
     /// "morning" or "evening" (started by the server at the set time), or "manual" (started in the app).

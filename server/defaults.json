@@ -1,6 +1,6 @@
 {
-  "home": { "code": "S08408", "name": "Roma Tuscolana" },
-  "work": { "code": "S08400", "name": "Muratella" },
+  "home": { "code": "S08408", "name": "Roma Tuscolana", "walk": 13 },
+  "work": { "code": "S08400", "name": "Muratella", "walk": 8 },
   "windows": [
     { "id": "morning", "from": "home", "start": "07:30", "end": "09:00", "days": [1, 2, 3, 4, 5], "on": true },
     { "id": "evening", "from": "work", "start": "16:45", "end": "18:45", "days": [1, 2, 3, 4, 5], "on": true }

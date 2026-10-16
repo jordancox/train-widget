@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { journeys } from './lib/viaggiatreno.mjs';
+import { journeys, estimate } from './lib/viaggiatreno.mjs';
 import { rome, dueWindow, nextStart, liveContent, change, startAlert, validSettings, autoFrom } from './lib/schedule.mjs';
 
 const fx = name => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -22,7 +22,7 @@ test('to work: only trains that reach Muratella after Tuscolana, soonest first',
   for (const t of list) {
     assert.equal(t.dest, 'Fiumicino Aeroporto'); // the Fara Sabina/Poggio Mirteto ones pass Muratella first
     assert.ok(t.arr > t.exp);
-    assert.equal(t.exp, t.dep + t.delay * 60);
+    assert.ok(t.exp >= t.dep && t.delay === Math.floor((t.exp - t.dep) / 60));
   }
   assert.deepEqual(list.map(t => t.exp), [...list.map(t => t.exp)].sort((a, b) => a - b));
 });
@@ -122,4 +122,34 @@ test('settings are checked before they are saved', () => {
   assert.ok(!validSettings({ ...settings, windows: [{ ...settings.windows[0], end: '07:00' }] }));
   assert.ok(!validSettings({ ...settings, windows: [{ ...settings.windows[0], start: '06:00', end: '15:00' }] })); // > 8 h
   assert.ok(!validSettings({ ...settings, skip: ['tomorrow'] }));
+});
+
+test('estimate: from the last stop the train was logged at, to the half minute (train 20693, 16 Oct 2026)', () => {
+  const at = hm => Date.parse(`2026-10-16T${hm}+02:00`);
+  const run = { fermate: [
+    { id: 'S08403', partenza_teorica: at('17:08:00'), arrivoReale: at('17:10:00'), partenzaReale: at('17:11:30') },
+    { id: MURATELLA, partenza_teorica: at('17:13:00') },
+  ] };
+  assert.equal(estimate(run, MURATELLA), at('17:16:30') / 1000); // it left at 17:16:00; the board's +4 said 17:17
+  run.fermate[1].arrivoReale = at('17:15:30');
+  assert.equal(estimate(run, MURATELLA), at('17:16:00') / 1000); // at the platform: half a minute after pulling in
+  assert.equal(estimate({ fermate: [{ id: MURATELLA, partenza_teorica: at('17:13:00') }] }, MURATELLA), null);
+  const early = { fermate: [{ id: 'S08403', partenza_teorica: at('17:08:00'), partenzaReale: at('17:07:00') }, { id: MURATELLA, partenza_teorica: at('17:13:00') }] };
+  assert.equal(estimate(early, MURATELLA), at('17:13:00') / 1000); // never before its time
+});
+
+test('walk time: "Leave in" while there is still time to set off for the first train, then the train itself', () => {
+  const train = { n: '1', dep: 1000, exp: 1000 + 10 * 60, delay: 0, dest: 'X', cancelled: false };
+  const c = (s, trains = [train]) => liveContent({ from: { name: 'Muratella', walk: 8 }, to: { name: 'Roma Tuscolana' }, trains, now: s * 1000 });
+  assert.equal(c(1000).walk, 8); // 10 minutes to go, 8 to walk
+  assert.equal(c(1000 + 3 * 60).walk, undefined); // 7 to go: too late to walk it calmly, so count to the train
+  assert.equal(c(1000, [{ ...train, cancelled: true }]).walk, undefined);
+  assert.equal(liveContent({ from: { name: 'Muratella' }, to: { name: 'Roma Tuscolana' }, trains: [train], now: 1000e3 }).walk, undefined);
+  assert.equal(change(c(1000), c(1000 + 3 * 60)), 'high');
+  assert.equal(change(c(1000), c(1000, [{ ...train, exp: train.exp + 90 }])), 'high'); // time to leave moved a minute
+  assert.equal(change(c(1000), c(1000, [{ ...train, exp: train.exp + 30 }])), 'low');
+  const s = structuredClone(settings);
+  assert.ok(validSettings(s));
+  s.work.walk = 61;
+  assert.ok(!validSettings(s));
 });

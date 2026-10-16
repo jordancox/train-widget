@@ -16,13 +16,19 @@ struct SettingsView: View {
             Form {
                 Section {
                     NavigationLink {
-                        StationSearch(title: "Home station") { settings.home = $0 }
+                        StationSearch(title: "Home station") { settings.home = Station(code: $0.code, name: $0.name, walk: settings.home.walk) }
                     } label: { LabeledContent("Home", value: settings.home.name) }
+                    Stepper(value: walk(\.home), in: 0...30) {
+                        LabeledContent("To its platform", value: "\(settings.home.walk ?? 0) min")
+                    }
                     NavigationLink {
-                        StationSearch(title: "Work station") { settings.work = $0 }
+                        StationSearch(title: "Work station") { settings.work = Station(code: $0.code, name: $0.name, walk: settings.work.walk) }
                     } label: { LabeledContent("Work", value: settings.work.name) }
+                    Stepper(value: walk(\.work), in: 0...30) {
+                        LabeledContent("To its platform", value: "\(settings.work.walk ?? 0) min")
+                    }
                 } header: { Text("Stations") } footer: {
-                    Text("Only trains that stop at both are shown.")
+                    Text("Only trains that stop at both are shown. \"To its platform\": from setting off to standing on the platform, with a margin. The lock screen counts down to when to leave, then to the train.")
                 }
 
                 ForEach($settings.windows) { $w in
@@ -75,6 +81,10 @@ struct SettingsView: View {
 
     private var valid: Bool {
         settings.home.code != settings.work.code && settings.windows.allSatisfy { $0.end > $0.start }
+    }
+
+    private func walk(_ station: WritableKeyPath<TreniSettings, Station>) -> Binding<Int> {
+        Binding(get: { settings[keyPath: station].walk ?? 0 }, set: { settings[keyPath: station].walk = $0 })
     }
 
     /// "07:30" ⇄ a time for the picker.
