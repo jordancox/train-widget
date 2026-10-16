@@ -1,0 +1,75 @@
+# Treni for iPhone. XcodeGen turns this into Treni.xcodeproj on the cloud Mac (.github/workflows/ios.yml); nobody
+# edits the Xcode project by hand. Two targets: the app (App/), and the widget extension that draws the Live
+# Activity (Live/); Shared/ is compiled into both. Set up like flashcards/ios/App/project.yml (the ios-testflight skill).
+name: Treni
+options:
+  bundleIdPrefix: org.jordancox
+  deploymentTarget:
+    iOS: "18.0" # Live Activities on broadcast channels need iOS 18
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  Treni:
+    type: application
+    platform: iOS
+    scheme: {}
+    sources:
+      - path: App
+      - path: Shared
+      - path: Assets.xcassets
+    dependencies:
+      - target: TreniLive
+    # Push for the Live Activity (ActivityKit asks for its own tokens; there are no ordinary notifications).
+    # Automatic signing adds the capability to the app's identifier; Broadcast was ticked on developer.apple.com.
+    entitlements:
+      path: Generated/Treni.entitlements
+      properties:
+        aps-environment: development
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: Treni
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        ITSAppUsesNonExemptEncryption: false
+        # The server and its secret (the cloud build passes TRENI_SECRET from the repo's secrets)
+        TreniServer: $(TRENI_SERVER)
+        TreniSecret: $(TRENI_SECRET)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.jordancox.treni
+        PRODUCT_NAME: Treni
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        TRENI_SERVER: "https://treni.jordancox.org"
+        TRENI_SECRET: ""
+  TreniLive:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Live
+      - path: Shared
+    info:
+      path: Generated/Live-Info.plist
+      properties:
+        CFBundleDisplayName: Treni
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.jordancox.treni.live
+        PRODUCT_NAME: TreniLive
+        SKIP_INSTALL: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO

@@ -1,0 +1,77 @@
+# The iPhone app (ios/), built on GitHub's cloud Mac. The repo is public, so its Mac minutes are free: every push
+# that touches ios/ builds for the simulator and sends back screenshots (gh run download <id> -n shots). TestFlight
+# only when asked: gh workflow run ios.yml -f testflight=true. Set up like flashcards/.github/workflows/ios.yml
+# (the ios-testflight skill). No pull_request trigger: secrets stay with runs Jordan starts.
+name: ios
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: Build it for iPhone and send it to TestFlight
+        type: boolean
+        default: false
+concurrency:
+  group: ios
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          xcodebuild -version
+          brew install xcodegen >/dev/null
+      - name: Xcode project
+        run: cd ios && xcodegen generate
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          mkdir -p ios/build
+          xcodebuild -project ios/Treni.xcodeproj -scheme Treni -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/build/dd \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= build 2>&1 \
+            | tee ios/build/xcodebuild.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" | head -80
+      - name: Screenshots on a simulated iPhone
+        run: ios/ci/sim-shots.sh
+      - name: Signing key, from the repo's secrets
+        if: inputs.testflight
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.ASC_KEY_P8 }}" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          # The one development certificate every cloud build signs with (shared with flashcards; valid to Oct 2027).
+          # Without it Xcode makes a new one on each fresh Mac, and Apple allows only ten.
+          KC=$RUNNER_TEMP/sign.keychain-db; KP=$(openssl rand -hex 16)
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          echo "${{ secrets.DEV_CERT_P12 }}" | base64 --decode > $RUNNER_TEMP/dev.p12
+          security import $RUNNER_TEMP/dev.p12 -P "${{ secrets.DEV_CERT_PASSWORD }}" -A -t cert -f pkcs12 -k "$KC"
+          rm $RUNNER_TEMP/dev.p12
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KC"
+      - name: Build for iPhone and send it to TestFlight
+        if: inputs.testflight
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          TRENI_SECRET: ${{ secrets.TRENI_SECRET }}
+        run: ios/ci/testflight.sh
+      # Not archive.log or export.log: they can hold TRENI_SECRET, and a public repo's artifacts are public.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: |
+            ios/build/shots
+            ios/build/xcodebuild.log
+          retention-days: 7
