@@ -34,6 +34,6 @@ launch settings-dark -demo -screen settings; sleep 5; shot settings-dark
 launch live -demo -live; sleep 6; shot app-live
 # Another app in front: the Live Activity moves to the Dynamic Island.
 xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null; sleep 4; shot island
-# The same over a map of Rome, for the promo sheet (promo/), if Maps opens without asking anything.
-xcrun simctl openurl "$UDID" "http://maps.apple.com/?ll=41.8902,12.4922&z=15" >/dev/null 2>&1 && sleep 10 && shot island-maps || true
+# The island is sometimes slow to show up (16 Oct 2026): a second try.
+sleep 6; shot island-2
 xcrun simctl terminate "$UDID" "$ID" || true

@@ -39,3 +39,7 @@ yarn-error.log*
 ios/Treni.xcodeproj/
 ios/Generated/
 ios/build/
+# promo/make.sh downloads and renders these
+promo/shots/
+promo/out/
+promo/icon.png
