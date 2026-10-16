@@ -20,7 +20,7 @@ final class Model: ObservableObject {
 
     func refresh() async {
         defer { refreshLiveHere() }
-        if demo { snap = Demo.snapshot(from: choice ?? "home"); return }
+        if demo { snap = Demo.snapshot(from: choice ?? Demo.from); return }
         guard api.configured else { error = "This build has no server secret: it needs the cloud build."; return }
         loading = true
         defer { loading = false }

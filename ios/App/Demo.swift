@@ -6,6 +6,13 @@ enum Demo {
     static let home = Station(code: "S08408", name: "Roma Tuscolana", walk: 13)
     static let work = Station(code: "S08400", name: "Muratella", walk: 8)
 
+    /// The way a real day would go at Rome's time now: to work before 13:00, home after.
+    static var from: String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Europe/Rome")!
+        return cal.component(.hour, from: Date()) < 13 ? "home" : "work"
+    }
+
     static func trains(from: String, now: Double = Date().timeIntervalSince1970) -> [Train] {
         let toWork = from == "home"
         func train(_ n: String, inMinutes: Double, delay: Int, cancelled: Bool = false) -> Train {
@@ -52,17 +59,17 @@ enum Shots {
             renderer.scale = 3
             if let png = renderer.uiImage?.pngData() { try? png.write(to: dir.appendingPathComponent("\(name).png")) }
         }
-        let list = Demo.trains(from: "home")
-        let s = Demo.content(from: "home", trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Leave in 2:30"
-        let train = Demo.content(from: "home", trains: list) // too late to walk it: counting to the train
+        let list = Demo.trains(from: Demo.from)
+        let s = Demo.content(from: Demo.from, trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Leave in 2:30"
+        let train = Demo.content(from: Demo.from, trains: list) // too late to walk it: counting to the train
         var cancelled = list
         cancelled[0].cancelled = true
         save("lock", width: 370, lock(s))
         save("lock-home", width: 370, lock(Demo.content(from: "work", trains: Demo.trains(from: "work"))))
         save("lock-train", width: 370, lock(train))
         save("lock-stale", width: 370, lock(s, stale: true))
-        save("lock-cancelled", width: 370, lock(Demo.content(from: "home", trains: cancelled)))
-        save("lock-empty", width: 370, lock(Demo.content(from: "home", trains: [], note: "No trains in the next hour")))
+        save("lock-cancelled", width: 370, lock(Demo.content(from: Demo.from, trains: cancelled)))
+        save("lock-empty", width: 370, lock(Demo.content(from: Demo.from, trains: [], note: "No trains in the next hour")))
         save("island-expanded", width: 370,
              VStack(spacing: 6) {
                  HStack(alignment: .top) {
@@ -87,9 +94,88 @@ enum Shots {
              .frame(height: 37)
              .background(.black, in: Capsule()))
         save("watch", width: 184, WatchView(state: s).padding(10).background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 20)))
+        // For the promo sheet (../promo/): a whole lock screen and a Watch face, drawn here to have Apple's fonts.
+        save("promo-lock", width: 402, PromoLock(state: s).frame(height: 874))
+        save("promo-watch", width: 208, PromoWatch(state: s).frame(height: 248))
     }
 
     private static func lock(_ s: TrainAttributes.ContentState, stale: Bool = false) -> some View {
         LockScreenView(state: s, stale: stale).background(Board.background, in: RoundedRectangle(cornerRadius: 22))
+    }
+}
+
+/// A lock screen around the Live Activity, laid out like an iPhone 16 Pro's (402 × 874 points).
+struct PromoLock: View {
+    let state: TrainAttributes.ContentState
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.04, green: 0.06, blue: 0.16), Color(red: 0.16, green: 0.13, blue: 0.34),
+                                    Color(red: 0.55, green: 0.27, blue: 0.40), Color(red: 0.96, green: 0.58, blue: 0.36)],
+                           startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [Color(red: 1, green: 0.78, blue: 0.45).opacity(0.55), .clear],
+                           center: UnitPoint(x: 0.3, y: 0.95), startRadius: 0, endRadius: 420)
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Spacer()
+                    Image(systemName: "cellularbars")
+                    Image(systemName: "wifi")
+                    Image(systemName: "battery.100percent")
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.horizontal, 30)
+                .frame(height: 59)
+                .overlay(Capsule().fill(.black).frame(width: 126, height: 37))
+                Text(Promo.date(state.updated)).font(.system(size: 21, weight: .semibold)).opacity(0.85).padding(.top, 34)
+                Text(Fmt.hm(state.updated)).font(.system(size: 100, weight: .bold)).monospacedDigit().opacity(0.92)
+                    .padding(.top, -10)
+                Spacer()
+                LockScreenView(state: state)
+                    .background(Board.background, in: RoundedRectangle(cornerRadius: 24))
+                    .padding(.horizontal, 16)
+                HStack {
+                    Promo.roundButton("flashlight.off.fill")
+                    Spacer()
+                    Promo.roundButton("camera.fill")
+                }
+                .padding(.horizontal, 46)
+                .padding(.top, 44)
+                Capsule().fill(.white).frame(width: 140, height: 5).padding(.top, 26).padding(.bottom, 8)
+            }
+        }
+        .foregroundStyle(.white)
+    }
+}
+
+/// An Apple Watch face (46 mm: 208 × 248 points) with the Live Activity at the top of the Smart Stack.
+struct PromoWatch: View {
+    let state: TrainAttributes.ContentState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(Fmt.hm(state.updated)).font(.system(size: 17, weight: .semibold, design: .rounded))
+                .frame(maxWidth: .infinity, alignment: .trailing).padding(.trailing, 14).padding(.top, 10)
+            WatchView(state: state).padding(10).background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 24))
+            RoundedRectangle(cornerRadius: 24).fill(Color(white: 0.10)).frame(height: 60)
+        }
+        .padding(.horizontal, 6)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(.black)
+        .foregroundStyle(.white)
+    }
+}
+
+enum Promo {
+    static func date(_ seconds: Double) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE d MMMM"
+        f.locale = Locale(identifier: "en_GB")
+        f.timeZone = TimeZone(identifier: "Europe/Rome")
+        return f.string(from: Date(timeIntervalSince1970: seconds))
+    }
+
+    static func roundButton(_ symbol: String) -> some View {
+        Image(systemName: symbol).font(.system(size: 21)).frame(width: 50, height: 50)
+            .background(Color.black.opacity(0.28), in: Circle())
     }
 }
