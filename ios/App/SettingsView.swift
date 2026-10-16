@@ -28,8 +28,11 @@ struct SettingsView: View {
                 ForEach($settings.windows) { $w in
                     Section {
                         Toggle("Start by itself", isOn: $w.on)
-                        DatePicker("From", selection: time($w.start), displayedComponents: .hourAndMinute)
-                        DatePicker("Until", selection: time($w.end), displayedComponents: .hourAndMinute)
+                        Group {
+                            DatePicker("From", selection: time($w.start), displayedComponents: .hourAndMinute)
+                            DatePicker("Until", selection: time($w.end), displayedComponents: .hourAndMinute)
+                        }
+                        .environment(\.locale, Locale(identifier: "en_GB")) // 24-hour, like the trains
                         DaysPicker(days: $w.days)
                     } header: {
                         Text("To \(Fmt.short(w.from == "home" ? settings.work.name : settings.home.name))")
