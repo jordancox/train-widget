@@ -12,6 +12,14 @@ struct ContentView: View {
                     Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
                 }
                 if let snap = model.snap {
+                    if snap.setup == true {
+                        Section {
+                            Button { showSettings = true } label: {
+                                Label("Welcome! Set your home station, the walk to each platform, and when it should turn up on your lock screen by itself.",
+                                      systemImage: "hand.wave.fill")
+                            }
+                        }
+                    }
                     trainsSection(snap)
                     liveSection(snap)
                     Section("On the lock screen") {

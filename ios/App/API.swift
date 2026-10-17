@@ -14,6 +14,15 @@ struct API {
 
     var configured: Bool { !secret.isEmpty }
 
+    /// This phone's id on the server: random, made once and kept. Each phone has its own settings and Live Activity
+    /// there (server/lib/phones.mjs).
+    static let phone: String = {
+        if let id = UserDefaults.standard.string(forKey: "phone") { return id }
+        let id = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(id, forKey: "phone")
+        return id
+    }()
+
     func call<T: Decodable>(_ method: String, _ path: String, query: [String: String] = [:],
                             body: (any Encodable)? = nil, as type: T.Type = T.self) async throws -> T {
         var parts = URLComponents(url: base.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
@@ -21,6 +30,7 @@ struct API {
         var request = URLRequest(url: parts.url!, timeoutInterval: 20)
         request.httpMethod = method
         request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
+        request.setValue(API.phone, forHTTPHeaderField: "X-Treni-Phone")
         if let body {
             request.httpBody = try JSONEncoder().encode(body)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -88,6 +98,8 @@ struct Snapshot: Decodable {
     var next: Next?
     var today: String
     var registered: Int
+    /// A phone the server has only just met: its owner hasn't saved their own stations and times yet.
+    var setup: Bool? = nil
     /// The server has no push key yet, so a Live Activity started here won't be updated.
     var dry: Bool
 }

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { journeys, estimate } from './lib/viaggiatreno.mjs';
 import { rome, dueWindow, nextStart, liveContent, change, startAlert, validSettings, autoFrom } from './lib/schedule.mjs';
+import { Phones, LEGACY, MAX_PHONES, migrate } from './lib/phones.mjs';
 
 const fx = name => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 const NOW = +fs.readFileSync(new URL('./fixtures/now.txt', import.meta.url), 'utf8');
@@ -152,4 +153,135 @@ test('walk time: "Leave in" while there is still time to set off for the first t
   assert.ok(validSettings(s));
   s.work.walk = 61;
   assert.ok(!validSettings(s));
+});
+
+// ---- Several phones (17 Oct 2026): a fake clock, fake trains and a fake APNs that records what it was asked ----
+
+function world() {
+  const clock = { t: Date.UTC(2026, 9, 19, 5, 30, 10) }; // Monday 07:30:10 in Rome
+  const sent = [];
+  let n = 0;
+  const apns = {
+    dry: false,
+    createChannel: async () => `ch${++n}`,
+    start: async (token, aps) => { sent.push({ kind: 'start', token, aps }); return { status: 200 }; },
+    broadcast: async (channel, aps, prio) => { sent.push({ kind: aps.event, channel, aps, prio }); return { status: 200 }; },
+  };
+  const journeys = async (a, b) => [{ n: `${a}-${b}`, dep: clock.t / 1000 + 20 * 60, exp: clock.t / 1000 + 20 * 60, delay: 0, dest: 'X', cancelled: false, plat: '5' }];
+  const old = { tokens: { aaaa1111aaaa1111aaaa1111aaaa1111: { device: 'iPhone', frequent: true, at: 1 } }, channels: { home: 'jordan-home', work: 'jordan-work' }, started: {}, live: null };
+  const data = migrate(old, structuredClone(settings), clock.t);
+  const phones = new Phones({ data, defaults: settings, apns, journeys, log: () => {}, now: () => clock.t });
+  const later = async minutes => { clock.t += minutes * 60e3; await phones.tick(); };
+  return { clock, sent, data, phones, later };
+}
+const BOB = 'b0b0b0b0-0000-4000-8000-000000000000', TOKEN_B = 'bbbb2222bbbb2222bbbb2222bbbb2222';
+
+test('phones: the one phone from before becomes the legacy record, settings and all', () => {
+  const { data } = world();
+  const j = data.phones[LEGACY];
+  assert.equal(data.version, 2);
+  assert.deepEqual(j.settings, settings);
+  assert.equal(j.setup, false);
+  assert.deepEqual(j.channels, { home: 'jordan-home', work: 'jordan-work' });
+  assert.deepEqual(migrate({}, null).phones, {}); // a fresh server: nobody yet
+});
+
+test('phones: a new phone starts with nothing automatic, and only its own settings change', async () => {
+  const { phones, data } = world();
+  const bob = phones.ensure(BOB);
+  assert.equal(bob.setup, true);
+  assert.ok(bob.settings.windows.every(w => !w.on));
+  const mine = structuredClone(bob.settings);
+  mine.home = { code: 'S08406', name: 'Roma Ostiense', walk: 5 };
+  mine.windows[0] = { ...mine.windows[0], start: '08:00', on: true };
+  assert.ok(phones.saveSettings(bob, mine));
+  assert.equal(bob.setup, false);
+  assert.deepEqual(data.phones[LEGACY].settings, settings); // Jordan's untouched
+  assert.ok(!phones.saveSettings(bob, { ...mine, home: { code: 'nope' } }));
+});
+
+test('phones: each starts at its own time, on its own token and channel', async () => {
+  const { phones, sent, later, data } = world();
+  const bob = phones.ensure(BOB);
+  phones.register(BOB, { token: TOKEN_B, device: 'iPhone', frequent: true });
+  const s = structuredClone(bob.settings);
+  s.home = { code: 'S08406', name: 'Roma Ostiense', walk: 5 };
+  s.windows[0] = { ...s.windows[0], start: '08:00', on: true };
+  phones.saveSettings(bob, s);
+
+  await phones.tick(); // 07:30:10: Jordan's morning
+  const starts = sent.filter(x => x.kind === 'start');
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].token, 'aaaa1111aaaa1111aaaa1111aaaa1111');
+  assert.equal(starts[0].aps['input-push-channel'], 'jordan-home');
+  assert.equal(starts[0].aps['content-state'].walk, 13);
+  assert.equal(data.phones[BOB].live, null);
+
+  await later(30); // 08:00:10: Bob's
+  const bobStart = sent.filter(x => x.kind === 'start')[1];
+  assert.equal(bobStart.token, TOKEN_B);
+  assert.equal(bobStart.aps['content-state'].from, 'Ostiense');
+  assert.equal(bobStart.aps['content-state'].walk, 5);
+  assert.notEqual(bobStart.aps['input-push-channel'], 'jordan-home');
+  assert.equal(data.phones[BOB].live.kind, 'morning');
+  assert.equal(data.phones[LEGACY].live.kind, 'morning');
+});
+
+test("phones: one phone's day off or stop ends only its own Live Activity", async () => {
+  const { phones, sent, data } = world();
+  const bob = phones.ensure(BOB);
+  phones.register(BOB, { token: TOKEN_B, device: 'iPhone', frequent: true });
+  const s = structuredClone(bob.settings);
+  s.windows[0].on = true;
+  phones.saveSettings(bob, s);
+  await phones.tick();
+  assert.ok(data.phones[LEGACY].live && data.phones[BOB].live);
+  const bobChannel = bob.channels.home;
+
+  await phones.skipToday(bob);
+  const ends = sent.filter(x => x.kind === 'end');
+  assert.deepEqual(ends.map(x => x.channel), [bobChannel]);
+  assert.ok(data.phones[LEGACY].live);
+  assert.deepEqual(data.phones[LEGACY].settings.skip, []);
+
+  await phones.startLive(bob, 'work');
+  await phones.stopLive(bob);
+  assert.ok(sent.filter(x => x.kind === 'end').every(x => x.channel !== 'jordan-home'));
+  assert.ok(data.phones[LEGACY].live);
+});
+
+test('phones: a newer build on the legacy phone takes it over by its push-to-start token', async () => {
+  const { phones, data } = world();
+  const NEW = '11111111-2222-4333-8444-555555555555';
+  await phones.tick(); // Jordan's morning is live
+  phones.ensure(NEW); // the new build looks at /api/state before iOS hands it the token
+  phones.register(NEW, { token: 'aaaa1111aaaa1111aaaa1111aaaa1111', device: 'iPhone', frequent: true });
+  assert.equal(data.phones[LEGACY], undefined);
+  const j = data.phones[NEW];
+  assert.deepEqual(j.settings, settings);
+  assert.deepEqual(j.channels, { home: 'jordan-home', work: 'jordan-work' });
+  assert.equal(j.live.kind, 'morning');
+  assert.equal(j.id, NEW);
+  // A token belongs to one phone: registering it elsewhere moves it.
+  phones.register(BOB, { token: 'aaaa1111aaaa1111aaaa1111aaaa1111', device: 'iPhone', frequent: true });
+  assert.deepEqual(Object.keys(data.phones[NEW].tokens), []);
+});
+
+test('phones: at most MAX_PHONES, and quiet ones are forgotten', async () => {
+  const { phones, data, clock } = world();
+  for (let i = 1; i < MAX_PHONES; i++) phones.ensure(`phone-${String(i).padStart(4, '0')}`);
+  assert.throws(() => phones.ensure('one-too-many'), { status: 403 });
+  clock.t += 31 * 86400e3; // a month on: the ones with no token go; Jordan's has one
+  await phones.tick();
+  assert.deepEqual(Object.keys(data.phones), [LEGACY]);
+});
+
+test('phones: the snapshot is the asking phone\'s own', async () => {
+  const { phones } = world();
+  const bob = phones.ensure(BOB);
+  const snap = await phones.snapshot(bob, 'home');
+  assert.equal(snap.setup, true);
+  assert.equal(snap.registered, 0);
+  assert.notEqual(snap.channel, 'jordan-home');
+  assert.equal((await phones.snapshot(phones.get(LEGACY), 'home')).channel, 'jordan-home');
 });

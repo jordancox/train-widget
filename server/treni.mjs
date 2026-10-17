@@ -1,17 +1,19 @@
 #!/usr/bin/env node
-// The Treni server on the VM: watches Jordan's trains on Viaggiatreno and keeps the iPhone's Live Activity up to
-// date through Apple's push service. Runs as the user service `treni` (treni.service), on localhost:8795, which
-// the VM's Cloudflare tunnel publishes as treni.jordancox.org (outside Cloudflare Access: the app can't log in
-// there, so every /api call carries the shared secret instead).
+// The Treni server on the VM: watches the trains on Viaggiatreno and keeps each phone's Live Activity up to date
+// through Apple's push service. Runs as the user service `treni` (treni.service), on localhost:8795, which the VM's
+// Cloudflare tunnel publishes as treni.jordancox.org (outside Cloudflare Access: the app can't log in there, so every
+// /api call carries the shared secret instead). Jordan's and his colleagues' phones each have their own settings
+// and Live Activity (lib/phones.mjs).
 //
-// In a window (settings.windows, Rome time) it starts the Live Activity on the phone by itself (push-to-start,
-// subscribed to that direction's broadcast channel), checks the trains every 45 seconds (every 15 around the time
-// to set off and the departure), pushes when something changes (and every 4 minutes anyway, so the phone knows
-// it's fresh), and ends it when the window closes.
+// In a phone's window (its settings.windows, Rome time) it starts the Live Activity on that phone by itself
+// (push-to-start, subscribed to the phone's broadcast channel for that direction), checks the trains every 45
+// seconds (every 15 around the time to set off and the departure), pushes when something changes (and every 4
+// minutes anyway, so the phone knows it's fresh), and ends it when the window closes.
 // The app can also start one by hand (POST /api/live), stop it (DELETE /api/live) or skip today.
 //
 //   node treni.mjs           the server
-//   node treni.mjs --print   what the Live Activity would show now, both ways, then exit
+//   node treni.mjs --print   what each phone's Live Activity would show now, both ways, then exit
+//   node treni.mjs --phones  who's on it: stations, walk times, automatic starts, last seen
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -19,7 +21,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { journeys, stations } from './lib/viaggiatreno.mjs';
 import { APNs } from './lib/apns.mjs';
-import { rome, dueWindow, nextStart, autoFrom, liveContent, change, startAlert, validSettings } from './lib/schedule.mjs';
+import { Phones, LEGACY, migrate } from './lib/phones.mjs';
+import { short } from './lib/schedule.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const env = process.env;
@@ -27,132 +30,38 @@ const PORT = +(env.PORT || 8795);
 const DATA = env.DATA_DIR || path.join(os.homedir(), '.local/share/treni');
 const SECRET = env.TRENI_SECRET || '';
 const BUNDLE = env.BUNDLE_ID || 'org.jordancox.treni';
-const TICK = 15e3, CHECK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60;
+const TICK = 15e3;
 
 const log = (...a) => console.log(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Rome' }), ...a); // Rome time, like everything else
 fs.mkdirSync(DATA, { recursive: true });
 
 const read = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
 const write = (file, data) => { fs.writeFileSync(file + '.tmp', JSON.stringify(data, null, 1)); fs.renameSync(file + '.tmp', file); };
-const SETTINGS = path.join(DATA, 'settings.json'), STATE = path.join(DATA, 'state.json');
-let settings = read(SETTINGS, null) || read(path.join(HERE, 'defaults.json'));
-const state = { tokens: {}, channels: {}, started: {}, live: null, ...read(STATE, {}) };
-const save = () => write(STATE, state);
+const STATE = path.join(DATA, 'state.json'), OLD_SETTINGS = path.join(DATA, 'settings.json');
+const defaults = read(path.join(HERE, 'defaults.json'));
+
+// state.json from before 17 Oct 2026 held one phone, with its settings in settings.json: both are kept as *.v1.json.
+let data = read(STATE, null);
+if (!data?.version) {
+  const old = read(OLD_SETTINGS, null);
+  data = migrate(data, old);
+  if (fs.existsSync(STATE)) fs.copyFileSync(STATE, path.join(DATA, 'state.v1.json'));
+  if (old) fs.renameSync(OLD_SETTINGS, path.join(DATA, 'settings.v1.json'));
+  write(STATE, data);
+  if (old) log('state.json: moved the one phone to the', LEGACY, 'record');
+}
 
 const apns = new APNs({
   keyPath: env.APNS_KEY_PATH, keyId: env.APNS_KEY_ID, teamId: env.APPLE_TEAM_ID, bundleId: BUNDLE,
   sandbox: env.APNS_SANDBOX === '1', log,
 });
+const phones = new Phones({ data, defaults, apns, journeys, log, save: () => write(STATE, data) });
 
-const other = from => (from === 'home' ? 'work' : 'home');
-
-// Trains, cached for 20 seconds per direction so the app and the push loop share one set of calls.
-const cache = new Map();
-async function trains(from) {
-  const a = settings[from], b = settings[other(from)];
-  const key = `${a.code}>${b.code}`, hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 10e3) return hit.trains;
-  const list = await journeys(a.code, b.code);
-  cache.set(key, { at: Date.now(), trains: list });
-  return list;
-}
-const content = async from => liveContent({ from: settings[from], to: settings[other(from)], trains: await trains(from) });
-
-async function channel(from) {
-  const have = state.channels[from];
-  if (!have || (have.startsWith('dry-') && !apns.dry)) { state.channels[from] = await apns.createChannel(); save(); log('new channel for', from); }
-  return state.channels[from];
-}
-
-const secs = (ms = Date.now()) => Math.floor(ms / 1000);
-const tokenGone = r => r.status === 410 || (r.status === 400 && /BadDeviceToken|ExpiredToken/.test(JSON.stringify(r.body)));
-
-async function startWindow(w, key) {
-  state.started[key] = Date.now();
-  const tokens = Object.keys(state.tokens);
-  if (!tokens.length) { log(`${w.id}: due, but no phone has registered yet (open the app once)`); return; }
-  const c = await content(w.from);
-  const aps = {
-    timestamp: secs(), event: 'start', 'content-state': c,
-    'attributes-type': 'TrainAttributes', attributes: { window: w.id, from: w.from },
-    alert: startAlert(c), 'input-push-channel': await channel(w.from),
-    'stale-date': secs() + STALE, 'relevance-score': 100,
-  };
-  let ok = 0;
-  for (const t of tokens) {
-    const r = await apns.start(t, aps);
-    if (r.status === 200) ok++;
-    else if (tokenGone(r)) { delete state.tokens[t]; log('dropped a stale phone token'); }
-    else log(`${w.id}: start refused`, r.status, JSON.stringify(r.body));
-  }
-  if (ok) {
-    state.live = { kind: w.id, from: w.from, until: w.endsAt, startedAt: Date.now(), last: c, lastPushAt: Date.now(), pushes: 1 };
-    log(`${w.id}: started on ${ok} phone(s)`);
-  } else if ((state.started[key + '#tries'] = (state.started[key + '#tries'] || 0) + 1) < 3) {
-    delete state.started[key]; // try again next tick, twice more
-  }
-}
-
-let failures = 0;
-async function updateLive(force = false) {
-  const live = state.live;
-  let c;
-  try { c = await content(live.from); failures = 0; } catch (e) {
-    if (++failures < 3 || !live.last) return log('trains:', e.message);
-    c = { ...live.last, note: 'Live train data paused', updated: secs() };
-  }
-  const what = change(live.last, c);
-  if (!what && !force && Date.now() - live.lastPushAt < HEARTBEAT) return;
-  const aps = { timestamp: secs(), event: 'update', 'content-state': c, 'stale-date': secs() + STALE };
-  const r = await apns.broadcast(await channel(live.from), aps, what === 'high' ? 10 : 5);
-  if (r.status === 200) { live.last = c; live.lastPushAt = Date.now(); live.pushes++; }
-  else log('update refused', r.status, JSON.stringify(r.body));
-}
-
-async function endLive(why) {
-  const live = state.live;
-  if (!live) return;
-  state.live = null;
-  const aps = { timestamp: secs(), event: 'end', 'dismissal-date': secs() + 60 };
-  if (live.last) aps['content-state'] = { ...live.last, updated: secs() };
-  const r = await apns.broadcast(await channel(live.from), aps, 10, 60);
-  log(`ended (${why}) after ${live.pushes} pushes`, r.status === 200 ? '' : `— refused ${r.status} ${JSON.stringify(r.body)}`);
-}
-
-// Every 45 s, but every 15 s around the time to set off and the departure itself, so "Leave in" turns into
-// "Leaves in", and a train that has left goes, without waiting.
-const busy = (c, now) => {
-  const t = c?.trains?.[0], s = now / 1000;
-  return !!t && [t.exp - (c.walk || 0) * 60, t.exp].some(x => s > x - 90 && s < x + 180);
-};
-let ticking = false, checked = 0;
+let ticking = false;
 async function tick() {
   if (ticking) return;
-  const now = Date.now();
-  if (now - checked < CHECK - 1e3 && !(state.live && busy(state.live.last, now))) return;
   ticking = true;
-  checked = now;
-  try {
-    const w = dueWindow(settings, now), today = rome(now).date;
-    if (w) {
-      const key = `${today}/${w.id}`;
-      if (state.live?.from === w.from) {
-        if (state.live.kind !== w.id) Object.assign(state.live, { kind: w.id, until: w.endsAt }); // a manual one becomes the window's
-        state.started[key] ??= now;
-      } else if (!state.started[key]) {
-        if (state.live) await endLive('the other direction is due');
-        await startWindow(w, key);
-      }
-    }
-    if (state.live && now >= state.live.until) await endLive('window over');
-    if (state.live) await updateLive();
-    for (const k of Object.keys(state.started)) if (k.slice(0, 10) < rome(now - 3 * 86400e3).date) delete state.started[k];
-    save();
-  } catch (e) {
-    log('tick:', e.message);
-  } finally {
-    ticking = false;
-  }
+  try { await phones.tick(); } catch (e) { log('tick:', e.message); } finally { ticking = false; }
 }
 
 // ---- HTTP: the app's API ----
@@ -172,98 +81,84 @@ const send = (res, status, data) => {
   res.end(JSON.stringify(data));
 };
 
-async function snapshot(from) {
-  from = from === 'home' || from === 'work' ? from : state.live?.from || autoFrom();
-  const list = await trains(from);
-  return {
-    now: secs(), from, settings,
-    trains: list.map(({ origin, date, arrSched, notStarted, ...t }) => t),
-    content: liveContent({ from: settings[from], to: settings[other(from)], trains: list }),
-    channel: await channel(from),
-    live: state.live && { kind: state.live.kind, from: state.live.from, until: secs(state.live.until) },
-    next: nextStart(settings),
-    today: rome().date,
-    registered: Object.keys(state.tokens).length,
-    dry: apns.dry,
-  };
+// The phone a call is for: X-Treni-Phone, a random id the app makes once; builds without it are the legacy phone.
+function phoneId(req) {
+  const id = req.headers['x-treni-phone'];
+  if (id === undefined) return LEGACY;
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) throw Object.assign(new Error('phone id'), { status: 400 });
+  return id;
 }
 
 const routes = {
-  'GET /api/state': async (req, res, q) => send(res, 200, await snapshot(q.get('from'))),
+  'GET /api/state': async (req, res, q, p) => send(res, 200, await phones.snapshot(p, q.get('from'))),
   'GET /api/stations': async (req, res, q) => send(res, 200, await stations(q.get('q') || '')),
-  'PUT /api/settings': async (req, res) => {
-    const s = await body(req);
-    if (!validSettings(s)) return send(res, 400, { error: 'settings not valid' });
-    settings = { home: s.home, work: s.work, windows: s.windows, skip: (s.skip || []).filter(d => d >= rome().date) };
-    write(SETTINGS, settings);
-    cache.clear();
-    log('settings saved');
-    send(res, 200, settings);
+  'PUT /api/settings': async (req, res, q, p) => {
+    if (!phones.saveSettings(p, await body(req))) return send(res, 400, { error: 'settings not valid' });
+    send(res, 200, p.settings);
   },
-  'POST /api/register': async (req, res) => {
+  'POST /api/register': async (req, res, q, p, id) => {
     const { token, device, frequent } = await body(req);
     if (!/^[0-9a-f]{32,200}$/i.test(token || '')) return send(res, 400, { error: 'token' });
-    const known = !!state.tokens[token];
-    state.tokens[token] = { device: String(device || '').slice(0, 60), frequent: !!frequent, at: Date.now() };
-    save();
-    if (!known) log('phone registered:', state.tokens[token].device);
+    phones.register(id, { token, device, frequent });
     send(res, 200, { ok: true });
   },
-  'POST /api/live': async (req, res) => {
+  'POST /api/live': async (req, res, q, p) => {
     const { from, minutes = 90 } = await body(req);
     if (!['home', 'work'].includes(from)) return send(res, 400, { error: 'from' });
-    if (state.live && state.live.from !== from) await endLive('started the other way in the app');
-    const w = dueWindow(settings);
-    if (!state.live) {
-      const until = w?.from === from ? w.endsAt : Date.now() + Math.min(Math.max(+minutes || 90, 10), 8 * 60) * 60e3;
-      state.live = { kind: w?.from === from ? w.id : 'manual', from, until, startedAt: Date.now(), last: null, lastPushAt: 0, pushes: 0 };
-      if (w?.from === from) state.started[`${rome().date}/${w.id}`] ??= Date.now();
-      log(`live: started in the app (${from})`);
-    }
-    await updateLive(true);
-    save();
-    send(res, 200, await snapshot(from));
+    await phones.startLive(p, from, minutes);
+    send(res, 200, await phones.snapshot(p, from));
   },
-  'DELETE /api/live': async (req, res) => {
-    await endLive('stopped in the app');
-    save();
+  'DELETE /api/live': async (req, res, q, p) => {
+    await phones.stopLive(p);
     send(res, 200, { ok: true });
   },
-  'POST /api/skip': async (req, res) => {
-    const today = rome().date;
-    settings.skip = [...new Set([...(settings.skip || []).filter(d => d >= today), today])].sort();
-    write(SETTINGS, settings);
-    if (state.live && state.live.kind !== 'manual') await endLive('skipped today');
-    save();
-    log('skipping today');
-    send(res, 200, settings);
+  'POST /api/skip': async (req, res, q, p) => {
+    await phones.skipToday(p);
+    send(res, 200, p.settings);
   },
-  'DELETE /api/skip': async (req, res, q) => {
-    settings.skip = (settings.skip || []).filter(d => d !== (q.get('date') || rome().date));
-    write(SETTINGS, settings);
-    send(res, 200, settings);
+  'DELETE /api/skip': async (req, res, q, p) => {
+    phones.unskip(p, q.get('date'));
+    send(res, 200, p.settings);
   },
 };
 
 async function serve(req, res) {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return send(res, 200, { ok: true });
+  if (url.pathname === '/privacy') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    return res.end(fs.readFileSync(path.join(HERE, 'privacy.html')));
+  }
   const route = routes[`${req.method} ${url.pathname}`];
   if (!route) return send(res, 404, { error: 'not found' });
   if (!authed(req)) return send(res, 401, { error: 'unauthorised' });
-  try { await route(req, res, url.searchParams); } catch (e) {
+  try {
+    const id = phoneId(req);
+    // A phone the server hasn't seen yet only gets a record once it looks at something of its own.
+    const p = url.pathname === '/api/stations' ? null : url.pathname === '/api/register' ? phones.get(id) : phones.ensure(id);
+    await route(req, res, url.searchParams, p, id);
+  } catch (e) {
     log(req.method, url.pathname, e.message);
-    send(res, 502, { error: e.message });
+    send(res, e.status || 502, { error: e.message });
   }
 }
 
 if (process.argv.includes('--print')) {
-  for (const from of ['home', 'work']) console.log(JSON.stringify(await content(from), null, 1));
+  for (const p of phones.list) for (const from of ['home', 'work']) console.log(phones.label(p), JSON.stringify(await phones.content(p, from), null, 1));
+  process.exit(0);
+}
+if (process.argv.includes('--phones')) {
+  const hm = ms => new Date(ms).toLocaleString('en-GB', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' });
+  for (const p of phones.list) {
+    const s = p.settings, on = s.windows.filter(w => w.on).map(w => `${w.from === 'home' ? '→' : '←'}${w.start}`).join(' ') || 'nothing by itself';
+    console.log(`${phones.label(p).padEnd(22)} ${short(s.home.name)} ${s.home.walk ?? 0}′ ⇄ ${short(s.work.name)} ${s.work.walk ?? 0}′  ${on}${p.setup ? '  (not set up)' : ''}` +
+      `  tokens ${Object.keys(p.tokens).length}  seen ${hm(p.seen)}${p.live ? `  LIVE ${p.live.from}` : ''}`);
+  }
   process.exit(0);
 }
 if (!SECRET) { console.error('TRENI_SECRET is not set (~/.config/treni/env)'); process.exit(1); }
 http.createServer(serve).listen(PORT, '127.0.0.1', () =>
-  log(`treni on 127.0.0.1:${PORT}`, apns.dry ? '(no APNs key yet: pushes are only logged)' : '(APNs on)', `${Object.keys(state.tokens).length} phone(s)`));
+  log(`treni on 127.0.0.1:${PORT}`, apns.dry ? '(no APNs key yet: pushes are only logged)' : '(APNs on)', `${phones.list.length} phone(s)`));
 tick();
 setInterval(tick, TICK);
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { save(); apns.close(); process.exit(0); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { write(STATE, data); apns.close(); process.exit(0); });

@@ -3,7 +3,8 @@
 Jordan takes the FL1 from **Roma Tuscolana** to **Muratella** (WFP HQ) in the morning and back in the evening. This
 started as a Scriptable script (Sept 2025). Since 16 Oct 2026 it's **Treni**: his own iPhone app with a Live
 Activity (lock screen, Dynamic Island, Watch Smart Stack) that a server on the VM starts by itself at set weekday
-times and keeps up to date. Public repo (`jordancox/train-widget`): never commit a secret, a token or the push key.
+times and keeps up to date. Since 17 Oct 2026 a few colleagues can have it too: each phone has its own settings
+and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordancox/train-widget`): never commit a secret, a token or the push key.
 
 ## Pieces
 
@@ -11,9 +12,10 @@ times and keeps up to date. Public repo (`jordancox/train-widget`): never commit
   `~/.config/systemd/user/`), on `127.0.0.1:8795`, published by the VM's Cloudflare tunnel as
   **treni.jordancox.org**, deliberately outside Cloudflare Access (the app can't log in there); every `/api` call
   carries `TRENI_SECRET`. Config in `~/.config/treni/env` (mode 600: the secret, team, bundle ID, APNs key ID and
-  path). Settings (stations, windows, days off) and state (phone tokens, channels, what's live) in
-  `~/.local/share/treni/`. Logs: `journalctl --user -u treni`. `node treni.mjs --print` shows what the Live Activity
-  would say now. Tests: `cd server && node --test test.mjs` (real Viaggiatreno answers saved in `fixtures/`).
+  path). Everyone's phones (settings, push-to-start tokens, channels, what's live) in `~/.local/share/treni/state.json`
+  (version 2; the single-phone files from before 17 Oct 2026 are kept there as `*.v1.json`). Logs: `journalctl --user
+  -u treni`. `node treni.mjs --phones` lists who's on it; `--print` shows what each Live Activity would say now.
+  `/privacy` is a public page saying what the server keeps (for TestFlight's external testers). Tests: `cd server && node --test test.mjs` (real Viaggiatreno answers saved in `fixtures/`).
 - `ios/`: the app (SwiftUI, iOS 18+, bundle `org.jordancox.treni`) and its widget extension (`org.jordancox.treni.live`,
   the Live Activity's UI). `project.yml` for XcodeGen; `Shared/` is in both targets. Built on GitHub's cloud Mac
   (`.github/workflows/ios.yml`): every push touching `ios/` builds for the simulator and sends back screenshots;
@@ -32,10 +34,17 @@ times and keeps up to date. Public repo (`jordancox/train-widget`): never commit
   minutes after it has left, so trains near their time are checked against their own run (`andamentoTreno`).
 - **Live Activity**: in a window (default weekdays 07:30–09:00 from home, 16:45–18:45 from work) the server sends
   push-to-start to the phone's push-to-start token with `input-push-channel`, so the activity listens on that
-  direction's **broadcast channel** (iOS 18) and the app never has to wake up to report a token. Every 45 s it
+  phone's **broadcast channel** for that direction (iOS 18) and the app never has to wake up to report a token.
+  Channels are per phone, not shared by route: the content-state carries each person's walk time, and ending a
+  channel ends every activity on it. Every 45 s it
   re-reads the trains and broadcasts when something changes (priority 10 if it changes what you'd do, 5 otherwise),
   plus every 4 min so the stale date moves on; it ends the activity when the window closes. The countdown ticks on
   the phone by itself. The app can start one by hand, stop it, or skip today.
+- **Several phones** (17 Oct 2026, for 5–6 colleagues through TestFlight): the app sends a random id it makes once
+  (`X-Treni-Phone`, `API.phone`); a new phone starts from `defaults.json` with nothing starting by itself and a
+  welcome line until it saves its own Settings. Build 13 and older send no id and get the `legacy` record (Jordan's,
+  moved over from the single-phone files); a newer build takes it over when it registers the same push-to-start
+  token. At most 20 phones; a phone is forgotten a month after its token goes, or after four months unused.
 - **Walk time** (Settings, per station: home 13, work 8 minutes, from Jordan's guess on 16 Oct 2026): while there's
   still time to set off for the first train, the content-state carries `walk` and the countdown is to when to
   leave ("Leave in"); after that the server drops it and the countdown is to the train ("Train leaves in"). Around
