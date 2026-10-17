@@ -16,6 +16,8 @@ xcodebuild archive -project ios/Treni.xcodeproj -scheme Treni -configuration Rel
   DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$BUILD" TRENI_SECRET="$TRENI_SECRET" "${AUTH[@]}" \
   > ios/build/archive.log 2>&1 || { grep -E "error|Error" ios/build/archive.log | head -40; exit 1; }
 echo "archived, build $BUILD"
+# Not testFlightInternalTestingOnly (the skill's template has it): a build uploaded that way can never go to
+# outside testers, and Jordan's colleagues are outside testers (17 Oct 2026).
 cat > ios/build/export.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -25,7 +27,6 @@ cat > ios/build/export.plist <<PLIST
   <key>teamID</key><string>$TEAM</string>
   <key>signingStyle</key><string>automatic</string>
   <key>manageAppVersionAndBuildNumber</key><false/>
-  <key>testFlightInternalTestingOnly</key><true/>
 </dict></plist>
 PLIST
 xcodebuild -exportArchive -archivePath ios/build/Treni.xcarchive -exportOptionsPlist ios/build/export.plist \
