@@ -65,6 +65,11 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   and a test broadcast got 200 from both `api.push.apple.com` and `api-broadcast.push.apple.com`.
 - App Store Connect record "Treni Jordan" (app id 6823608242, SKU `treni`). Only Jordan sees it: the other user
   on the team (Marketing role) sees Super Lettore only.
+- TestFlight for colleagues (17 Oct 2026): external group **"Colleagues"**, joined by a public link capped at 10
+  (https://testflight.apple.com/join/kgcPFaxS). The test information shows Jordan's Gmail as the feedback address
+  and `/privacy` as the privacy policy; the beta review contact is Jordan. Builds from 19 on are uploaded for outside
+  testers too (`ios/ci/testflight.sh`; 17 was internal-only and couldn't join the group). Each new build has to be
+  added to the group by hand (API: `betaGroups/<id>/relationships/builds`).
 - Tunnel route: treni.jordancox.org → `http://localhost:8795`, a published application route with no Access.
 - GitHub secrets on the repo: the ASC key, the shared dev certificate, the team, and `TRENI_SECRET` (set by Jordan
   with the skill's `set-secrets.sh`).
