@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Treni promo sheet</title>
+<!-- App Store-style pictures of Treni, from the CI's screenshots in shots/ (make.sh). Opened as sheet.html#sheet it
+     is the whole contact sheet; #panel-1 … #panel-6 is one panel on its own. Lato is installed on the VM. -->
+<style>
+  :root {
+    --bg: #0a0f1d;
+    --ink: #ffffff;
+    --soft: #aab6d4;
+    --dim: #7c88a8;
+    --green: #40d17a;
+    --amber: #ffd36b;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: Lato, sans-serif; -webkit-font-smoothing: antialiased; }
+  .sheet { width: 1992px; padding: 64px; }
+
+  header { display: flex; align-items: center; gap: 40px; margin-bottom: 52px; }
+  header .icon { width: 148px; height: 148px; border-radius: 34px; box-shadow: 0 0 0 1px #ffffff1f, 0 20px 50px #0008; }
+  header h1 { font-size: 92px; font-weight: 900; letter-spacing: -2px; line-height: 1; }
+  header p { font-size: 27px; line-height: 1.4; color: var(--soft); margin-top: 12px; max-width: 1400px; }
+  header p b { color: var(--ink); font-weight: 700; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 600px); gap: 32px; }
+  footer { margin-top: 44px; font-size: 21px; line-height: 1.5; color: var(--dim); display: flex; justify-content: space-between; gap: 40px; }
+  footer b { color: var(--soft); font-weight: 700; }
+
+  .panel { position: relative; width: 600px; height: 1300px; border-radius: 44px; overflow: hidden; padding: 70px 52px 0; }
+  .warm { background: radial-gradient(120% 55% at 25% 100%, #f4945c55, transparent 65%), linear-gradient(#18204a, #0d1330); }
+  .green { background: radial-gradient(120% 55% at 75% 100%, #40d17a33, transparent 65%), linear-gradient(#122542, #0b1427); }
+  .blue { background: radial-gradient(120% 55% at 50% 100%, #5a8cff40, transparent 65%), linear-gradient(#141e44, #0b1128); }
+  .panel h2 { font-size: 52px; font-weight: 900; line-height: 1.04; letter-spacing: -0.8px; }
+  .panel h2 em { font-style: normal; color: var(--green); }
+  .panel .sub { font-size: 23px; line-height: 1.4; color: var(--soft); margin-top: 18px; }
+
+  /* An iPhone 16 Pro: the screenshots are 1206 × 2622. */
+  .phone { position: absolute; left: 50%; top: 350px; transform: translateX(-50%); padding: 11px; border-radius: 64px;
+           background: #050507; box-shadow: 0 0 0 2px #50545e, 0 0 0 4px #1b1d22, 0 40px 90px #000a; }
+  .phone img { display: block; width: 404px; height: 878px; border-radius: 50px; }
+
+  /* Live Activity cards, one under another */
+  .cards { position: absolute; left: 40px; right: 40px; top: 360px; display: flex; flex-direction: column; gap: 26px; }
+  .cards label { display: block; font-size: 17px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin: 0 0 12px 6px; }
+  .cards label .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 10px; vertical-align: 2px; }
+  .cards img { display: block; width: 100%; filter: drop-shadow(0 18px 34px #0009); }
+
+  /* The top of a phone, zoomed in, for the Dynamic Island */
+  .zooms { position: absolute; left: 30px; right: 30px; top: 360px; display: flex; flex-direction: column; gap: 34px; }
+  .zooms label { display: block; font-size: 17px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin: 0 0 14px 22px; }
+  .top { position: relative; height: 290px; overflow: hidden; padding: 9px 9px 0; border-radius: 74px 74px 0 0; background: #050507;
+         box-shadow: 0 0 0 2px #50545e, 0 0 0 4px #1b1d22;
+         -webkit-mask-image: linear-gradient(#000 55%, transparent); }
+  .top .scr { position: relative; width: 522px; height: 1135px; border-radius: 65px 65px 0 0; overflow: hidden; }
+  .top .scr > img { display: block; width: 100%; }
+  .top .expanded { position: absolute; left: 20.8px; top: 14.3px; width: 481px; filter: drop-shadow(0 10px 30px #000c); }
+  .top.tall { height: 360px; }
+
+  /* Apple Watch, 46 mm: the screen picture is 208 × 248 points */
+  .watch { position: absolute; left: 50%; top: 530px; transform: translateX(-50%); }
+  .band { position: absolute; left: 50%; transform: translateX(-50%); width: 236px; height: 420px; background: linear-gradient(90deg, #1a2342, #253159 50%, #1a2342); }
+  .band.up { bottom: 100%; margin-bottom: -40px; height: 230px; -webkit-mask-image: linear-gradient(transparent, #000 70%); }
+  .band.down { top: 100%; margin-top: -40px; }
+  .case { position: relative; padding: 18px; border-radius: 78px; background: radial-gradient(circle at 30% 20%, #3a3c43, #141518 70%);
+          box-shadow: 0 0 0 2px #5a5d66, 0 40px 90px #000b; }
+  .case img { display: block; width: 312px; height: 372px; border-radius: 60px; }
+  .crown { position: absolute; right: -16px; top: 92px; width: 20px; height: 64px; border-radius: 9px; background: linear-gradient(90deg, #2b2d33, #6b6f79, #2b2d33); }
+  .button { position: absolute; right: -9px; top: 196px; width: 10px; height: 84px; border-radius: 5px; background: #2b2d33; }
+
+  /* One panel alone (#panel-N) */
+  body.single .sheet { width: auto; padding: 0; }
+  body.single header, body.single footer { display: none; }
+  body.single .grid { display: block; }
+  body.single .panel { display: none; border-radius: 0; }
+  body.single .panel.on { display: block; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <img class="icon" src="icon.png" alt="">
+    <div>
+      <h1>Treni</h1>
+      <p>A <b>Live Activity</b> for one commute by train in Rome. On weekday mornings and evenings it turns up on the
+        lock screen <b>by itself</b>, counts down to <b>when to leave</b>, and follows the train live until it's gone.</p>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel warm" id="panel-1">
+      <h2>On your lock screen, <em>by itself</em></h2>
+      <p class="sub">Every weekday at the times you set, with the next train home or to work. Nothing to open, nothing to tap.</p>
+      <div class="phone"><img src="shots/promo-lock.png" alt=""></div>
+    </section>
+
+    <section class="panel green" id="panel-2">
+      <h2>Tells you when to <em>leave</em></h2>
+      <p class="sub">First it counts down to setting off, your walk to the platform included. Then to the train itself.</p>
+      <div class="cards">
+        <div><label><span class="dot" style="background:var(--green)"></span>Time to set off</label><img src="shots/lock.png" alt=""></div>
+        <div><label><span class="dot" style="background:var(--amber)"></span>Then the train</label><img src="shots/lock-train.png" alt=""></div>
+        <div><label><span class="dot" style="background:#ff5a52"></span>And if it's cancelled</label><img src="shots/lock-cancelled.png" alt=""></div>
+      </div>
+    </section>
+
+    <section class="panel blue" id="panel-3">
+      <h2>In the <em>Dynamic Island</em></h2>
+      <p class="sub">A glance away in any app. Touch and hold it for the platform and the train after.</p>
+      <div class="zooms">
+        <div><label>While you use your phone</label>
+          <div class="top"><div class="scr"><img src="shots/island.png" alt=""></div></div></div>
+        <div><label>Touch and hold</label>
+          <div class="top tall"><div class="scr"><img src="shots/island.png" alt=""><img class="expanded" src="shots/island-expanded.png" alt=""></div></div></div>
+      </div>
+    </section>
+
+    <section class="panel warm" id="panel-4">
+      <h2>On your <em>wrist</em> too</h2>
+      <p class="sub">The same countdown in the Smart Stack on Apple Watch. No Watch app needed.</p>
+      <div class="watch">
+        <div class="band up"></div><div class="band down"></div>
+        <div class="case"><img src="shots/promo-watch.png" alt=""><div class="crown"></div><div class="button"></div></div>
+      </div>
+    </section>
+
+    <section class="panel green" id="panel-5">
+      <h2>Every train, <em>live</em></h2>
+      <p class="sub">All the trains that stop at both stations, from the railway's live data: platform, delay, cancellations.</p>
+      <div class="phone"><img src="shots/app-live.png" alt=""></div>
+    </section>
+
+    <section class="panel blue" id="panel-6">
+      <h2>Set it <em>once</em></h2>
+      <p class="sub">Your two stations, the walk to each platform, and when it should start by itself.</p>
+      <div class="phone"><img src="shots/settings-dark.png" alt=""></div>
+    </section>
+  </div>
+
+  <footer>
+    <span>Built for one commute, <b>Roma Tuscolana ⇄ Muratella</b>, on iOS 18. Live data: Viaggiatreno (RFI).</span>
+    <span>A small server at home starts it and pushes every change.</span>
+  </footer>
+</div>
+<script>
+  const id = location.hash.slice(1);
+  if (id.startsWith('panel-')) {
+    document.body.classList.add('single');
+    document.getElementById(id).classList.add('on');
+  }
+</script>
+</body>
+</html>

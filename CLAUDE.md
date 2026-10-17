@@ -18,6 +18,10 @@ times and keeps up to date. Public repo (`jordancox/train-widget`): never commit
   the Live Activity's UI). `project.yml` for XcodeGen; `Shared/` is in both targets. Built on GitHub's cloud Mac
   (`.github/workflows/ios.yml`): every push touching `ios/` builds for the simulator and sends back screenshots;
   TestFlight with `gh workflow run ios.yml -f testflight=true`. How all that works: the **ios-testflight** skill.
+- `promo/`: an App Store-style contact sheet to show people (`make.sh` → `out/sheet.png` and one PNG per panel,
+  linked in `~/renders/treni-promo`), laid out in `sheet.html` around the CI's pictures. The demo pictures read
+  Monday 08:05 (`Demo.moment`, `Fmt.shift`) whatever time the build runs. The simulator sometimes leaves the Dynamic
+  Island empty: check `shots/island.png` before rendering from a new run.
 - `train-widget.js`: the old Scriptable script, kept working until the app is on his phone (no more mock data).
 
 ## How it works
