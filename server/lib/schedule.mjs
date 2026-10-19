@@ -49,23 +49,30 @@ export const short = name => (name || '').replace(/^Roma\s+/i, '');
 // (ios/Shared/TrainAttributes.swift); times are Unix seconds, because iOS decodes these with its default JSON
 // rules and a Swift Date would expect seconds since 2001.
 export function liveContent({ from, to, trains, now = Date.now(), note }) {
+  // Minutes from setting off to standing on the platform (Settings, per station). The countdown is to when to set
+  // off ("Leave in") for the next train you can still walk to, and the ones you can't reach any more are left out:
+  // with a train every 15 minutes and a 13-minute walk, counting to the first train mostly showed one you'd miss
+  // (Jordan, 19 Oct 2026). No walk set, or no train left that you can reach: it counts to the train itself.
+  const walk = from.walk || 0, s = now / 1000;
+  const reach = t => !t.cancelled && s < t.exp - walk * 60;
+  const i = walk ? trains.findIndex(reach) : -1;
   const state = {
     from: short(from.name),
     to: short(to.name),
-    trains: trains.slice(0, 3).map(t => {
+    trains: trains.slice(Math.max(i, 0), Math.max(i, 0) + 3).map(t => {
       const out = { n: t.n, dep: t.dep, exp: t.exp, delay: t.delay, dest: t.dest, cancelled: !!t.cancelled };
       if (t.plat) out.plat = t.plat;
       if (t.arr) out.arr = t.arr;
       return out;
     }),
-    updated: Math.floor(now / 1000),
+    updated: Math.floor(s),
   };
+  // A cancelled train you'd have set off for is skipped too; the note says why the next one is shown.
+  const cancelled = trains.slice(0, Math.max(i, 0)).filter(t => t.cancelled && s < t.exp - walk * 60);
   if (note) state.note = note;
   else if (!trains.length) state.note = 'No trains in the next hour';
-  // Minutes from setting off to standing on the platform (Settings, per station). While there's still time to set
-  // off for the first train, the phone counts down to then ("Leave in"); after that, to the train itself.
-  const walk = from.walk || 0, first = state.trains[0];
-  if (walk && first && !first.cancelled && now / 1000 < first.exp - walk * 60) state.walk = walk;
+  else if (cancelled.length) state.note = `${cancelled.map(t => hm(t.dep)).join(', ')} cancelled`;
+  if (i >= 0) state.walk = walk;
   return state;
 }
 

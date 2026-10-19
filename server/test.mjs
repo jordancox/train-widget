@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { journeys, estimate } from './lib/viaggiatreno.mjs';
-import { rome, dueWindow, nextStart, liveContent, change, startAlert, validSettings, autoFrom } from './lib/schedule.mjs';
+import { rome, dueWindow, nextStart, liveContent, change, startAlert, validSettings, autoFrom, hm } from './lib/schedule.mjs';
 import { Phones, LEGACY, MAX_PHONES, migrate } from './lib/phones.mjs';
 
 const fx = name => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
@@ -139,16 +139,24 @@ test('estimate: from the last stop the train was logged at, to the half minute (
   assert.equal(estimate(early, MURATELLA), at('17:13:00') / 1000); // never before its time
 });
 
-test('walk time: "Leave in" while there is still time to set off for the first train, then the train itself', () => {
-  const train = { n: '1', dep: 1000, exp: 1000 + 10 * 60, delay: 0, dest: 'X', cancelled: false };
-  const c = (s, trains = [train]) => liveContent({ from: { name: 'Muratella', walk: 8 }, to: { name: 'Roma Tuscolana' }, trains, now: s * 1000 });
+test('walk time: "Leave in" for the next train you can still walk to; the ones out of reach are left out', () => {
+  const a = { n: '1', dep: 1000, exp: 1000 + 10 * 60, delay: 0, dest: 'X', cancelled: false };
+  const b = { ...a, n: '2', dep: a.dep + 15 * 60, exp: a.exp + 15 * 60 };
+  const c = (s, trains = [a, b]) => liveContent({ from: { name: 'Muratella', walk: 8 }, to: { name: 'Roma Tuscolana' }, trains, now: s * 1000 });
   assert.equal(c(1000).walk, 8); // 10 minutes to go, 8 to walk
-  assert.equal(c(1000 + 3 * 60).walk, undefined); // 7 to go: too late to walk it calmly, so count to the train
-  assert.equal(c(1000, [{ ...train, cancelled: true }]).walk, undefined);
-  assert.equal(liveContent({ from: { name: 'Muratella' }, to: { name: 'Roma Tuscolana' }, trains: [train], now: 1000e3 }).walk, undefined);
+  assert.equal(c(1000).trains[0].n, '1');
+  assert.deepEqual(c(1000 + 3 * 60).trains.map(t => t.n), ['2']); // 7 to go: you'd miss it, so set off for the next
+  assert.equal(c(1000 + 3 * 60).walk, 8);
+  const off = c(1000, [{ ...a, cancelled: true }, b]); // the one you'd have gone for is cancelled
+  assert.equal(off.trains[0].n, '2');
+  assert.equal(off.note, `${hm(a.dep)} cancelled`);
+  assert.equal(c(1000 + 3 * 60, [{ ...a, cancelled: true }, b]).note, undefined); // out of reach anyway
+  assert.equal(c(1000 + 3 * 60, [a]).walk, undefined); // nothing left to walk to: count to the train
+  assert.equal(c(1000 + 3 * 60, [a]).trains[0].n, '1');
+  assert.equal(liveContent({ from: { name: 'Muratella' }, to: { name: 'Roma Tuscolana' }, trains: [a, b], now: 1000e3 + 3 * 60e3 }).trains[0].n, '1');
   assert.equal(change(c(1000), c(1000 + 3 * 60)), 'high');
-  assert.equal(change(c(1000), c(1000, [{ ...train, exp: train.exp + 90 }])), 'high'); // time to leave moved a minute
-  assert.equal(change(c(1000), c(1000, [{ ...train, exp: train.exp + 30 }])), 'low');
+  assert.equal(change(c(1000), c(1000, [{ ...a, exp: a.exp + 90 }, b])), 'high'); // time to leave moved a minute
+  assert.equal(change(c(1000), c(1000, [{ ...a, exp: a.exp + 30 }, b])), 'low');
   const s = structuredClone(settings);
   assert.ok(validSettings(s));
   s.work.walk = 61;

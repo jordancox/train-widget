@@ -44,11 +44,16 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   (`X-Treni-Phone`, `API.phone`); a new phone starts from `defaults.json` with nothing starting by itself and a
   welcome line until it saves its own Settings. Build 13 and older send no id and get the `legacy` record (Jordan's,
   moved over from the single-phone files); a newer build takes it over when it registers the same push-to-start
-  token. At most 20 phones; a phone is forgotten a month after its token goes, or after four months unused.
-- **Walk time** (Settings, per station: home 13, work 8 minutes, from Jordan's guess on 16 Oct 2026): while there's
-  still time to set off for the first train, the content-state carries `walk` and the countdown is to when to
-  leave ("Leave in"); after that the server drops it and the countdown is to the train ("Train leaves in"). Around
-  both moments the server checks every 15 s instead of 45.
+  token. At most 20 phones; a phone is forgotten a month after its token goes, or after four months unused. Apple's beta
+  reviewers turn up as phones of their own, doing what the review notes say (three on 17–19 Oct 2026: 4ff289,
+  68c9eb, 9d5fd2); they aren't Jordan's.
+- **Walk time** (Settings, per station: home 13, work 8 minutes, from Jordan's guess on 16 Oct 2026): the
+  content-state carries `walk` and the countdown is to when to set off ("Leave in") for the next train you can still
+  walk to; trains out of reach are left out of the content-state, and a cancelled one you'd have gone for is skipped
+  with a note. Only with no train left in reach does it count to the train ("Train leaves in"). Until 19 Oct 2026 it
+  counted to the first train, so with a train every 15 minutes "Leave in" showed for about 2 minutes in 15 (Jordan:
+  "the whole leave desk logic thing is flawed"). Once you've set off it moves on to the next train. Around the time
+  to leave and the departure the server checks every 15 s instead of 45.
 - **Expected times**: Viaggiatreno's delay is whole minutes and lags, so for trains due within 20 minutes the
   server takes the train's own run instead: half a minute after it pulled in if it's at the platform, otherwise
   its last logged stop (to the half minute) plus the timetable from there (`estimate()` in `lib/viaggiatreno.mjs`).
