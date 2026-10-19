@@ -57,7 +57,7 @@ enum Shots {
             if let png = renderer.uiImage?.pngData() { try? png.write(to: dir.appendingPathComponent("\(name).png")) }
         }
         let list = Demo.trains(from: "home")
-        let s = Demo.content(from: "home", trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Leave in 2:30"
+        let s = Demo.content(from: "home", trains: list, walk: 4) // 6½ minutes to the train, 4 to walk: "Start walking in 2:30"
         let train = Demo.content(from: "home", trains: list) // too late to walk it: counting to the train
         var cancelled = list
         cancelled[0].cancelled = true
@@ -67,20 +67,13 @@ enum Shots {
         save("lock-stale", width: 370, lock(s, stale: true))
         save("lock-cancelled", width: 370, lock(Demo.content(from: "home", trains: cancelled)))
         save("lock-empty", width: 370, lock(Demo.content(from: "home", trains: [], note: "No trains in the next hour")))
-        save("island-expanded", width: 370,
-             VStack(spacing: 6) {
-                 HStack(alignment: .top) {
-                     IslandExpandedLeading(state: s)
-                     Spacer()
-                     IslandExpandedCenter(state: s)
-                     Spacer()
-                     IslandExpandedTrailing(state: s)
-                 }
-                 IslandExpandedBottom(state: s)
-             }
-             .padding(18)
-             .foregroundStyle(.white)
-             .background(.black, in: RoundedRectangle(cornerRadius: 40)))
+        // Set off in time for the first train, so on the way to it; the countdown is already to leaving for the next
+        // (the server's `show`, as lib/schedule.mjs words it).
+        var onWay = Demo.content(from: "home", trains: Array(list.dropFirst()), walk: 13)
+        onWay.show = Show(line: "Walking to the \(Fmt.hm(list[0].dep)) +2? Leaves in", lineUntil: list[0].exp)
+        save("lock-onway", width: 370, lock(onWay))
+        save("island-onway", width: 370, island(onWay))
+        save("island-expanded", width: 370, island(s))
         save("island-compact", width: 250,
              HStack {
                  IslandCompactLeading(state: s)
@@ -98,6 +91,22 @@ enum Shots {
 
     private static func lock(_ s: TrainAttributes.ContentState, stale: Bool = false) -> some View {
         LockScreenView(state: s, stale: stale).background(Board.background, in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private static func island(_ s: TrainAttributes.ContentState) -> some View {
+        VStack(spacing: 6) {
+            HStack(alignment: .top) {
+                IslandExpandedLeading(state: s)
+                Spacer()
+                IslandExpandedCenter(state: s)
+                Spacer()
+                IslandExpandedTrailing(state: s)
+            }
+            IslandExpandedBottom(state: s)
+        }
+        .padding(18)
+        .foregroundStyle(.white)
+        .background(.black, in: RoundedRectangle(cornerRadius: 40))
     }
 }
 

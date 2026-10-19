@@ -48,12 +48,19 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   reviewers turn up as phones of their own, doing what the review notes say (three on 17–19 Oct 2026: 4ff289,
   68c9eb, 9d5fd2); they aren't Jordan's.
 - **Walk time** (Settings, per station: home 13, work 8 minutes, from Jordan's guess on 16 Oct 2026): the
-  content-state carries `walk` and the countdown is to when to set off ("Leave in") for the next train you can still
-  walk to; trains out of reach are left out of the content-state, and a cancelled one you'd have gone for is skipped
-  with a note. Only with no train left in reach does it count to the train ("Train leaves in"). Until 19 Oct 2026 it
-  counted to the first train, so with a train every 15 minutes "Leave in" showed for about 2 minutes in 15 (Jordan:
-  "the whole leave desk logic thing is flawed"). Once you've set off it moves on to the next train. Around the time
-  to leave and the departure the server checks every 15 s instead of 45.
+  content-state carries `walk` and the countdown is to when to set off ("Start walking in") for the next train you
+  can still walk to; trains out of reach are left out of the content-state, and a cancelled one you'd have gone for
+  is skipped with a note. Until it leaves, the one you'd be walking to if you set off in time stays in a bottom
+  line ("Walking to the 08:37? Leaves in 4:12"). Only with no train left in reach does it count to the train ("Train
+  leaves in"). Until 19 Oct 2026 it counted to the first train, so with a train every 15 minutes the walk countdown
+  showed for about 2 minutes in 15 (Jordan: "the whole leave desk logic thing is flawed"). Walking words and train
+  words stay apart (Jordan: "'leave in' could be construed as train time not me time"). Around those moments the
+  server checks every 15 s instead of 45.
+- **The wording is the server's** (19 Oct 2026, build 21 on): the content-state's `show` carries every word the Live
+  Activity shows and what each countdown counts to (`show()` in `lib/schedule.mjs`), so wording changes need no
+  build; the app falls back to its own words when a field is missing, and older builds ignore `show`. The welcome
+  line in the app is the server's too (`WELCOME` in `lib/phones.mjs`). Only the look (layout, colours, fonts) needs
+  a build.
 - **Expected times**: Viaggiatreno's delay is whole minutes and lags, so for trains due within 20 minutes the
   server takes the train's own run instead: half a minute after it pulled in if it's at the platform, otherwise
   its last logged stop (to the half minute) plus the timetable from there (`estimate()` in `lib/viaggiatreno.mjs`).

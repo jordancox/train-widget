@@ -100,8 +100,15 @@ struct Snapshot: Decodable {
     var registered: Int
     /// A phone the server has only just met: its owner hasn't saved their own stations and times yet.
     var setup: Bool? = nil
+    /// The line at the top that opens Settings (the welcome on a new phone), worded by the server. Without it, a new
+    /// phone gets `Snapshot.welcome`.
+    var welcome: String? = nil
     /// The server has no push key yet, so a Live Activity started here won't be updated.
     var dry: Bool
+}
+
+extension Snapshot {
+    static let welcome = "Welcome! Set your home station, the walk to each platform, and when it should turn up on your lock screen by itself."
 }
 
 struct LiveRequest: Encodable { var from: String }

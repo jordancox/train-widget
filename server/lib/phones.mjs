@@ -10,16 +10,18 @@ import { rome, dueWindow, nextStart, autoFrom, liveContent, change, startAlert, 
 
 export const LEGACY = 'legacy';
 export const MAX_PHONES = 20;
+// The line at the top of the app on a phone that hasn't saved its own settings yet; tapping it opens Settings.
+export const WELCOME = 'Welcome! Set your home station, the walk to each platform, and when it should turn up on your lock screen by itself.';
 const CHECK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60, DAY = 86400e3;
 
 const other = from => (from === 'home' ? 'work' : 'home');
 const tokenGone = r => r.status === 410 || (r.status === 400 && /BadDeviceToken|ExpiredToken/.test(JSON.stringify(r.body)));
 
-// Every 45 s, but every 15 s around the time to set off and the departure itself, so "Leave in" turns into
-// "Train leaves in", and a train that has left goes, without waiting.
+// Every 45 s, but every 15 s around the time to set off, the departure, and the departure of the train you may be
+// walking to, so the countdown moves on to the next train and a train that has left goes, without waiting.
 const busy = (c, now) => {
   const t = c?.trains?.[0], s = now / 1000;
-  return !!t && [t.exp - (c.walk || 0) * 60, t.exp].some(x => s > x - 90 && s < x + 180);
+  return !!t && [t.exp - (c.walk || 0) * 60, t.exp, c.show?.lineUntil].some(x => x && s > x - 90 && s < x + 180);
 };
 
 // The single-phone files from before 17 Oct 2026 (state.json without a version, and settings.json).
@@ -189,6 +191,7 @@ export class Phones {
       today: rome(this.now()).date,
       registered: Object.keys(p.tokens).length,
       setup: !!p.setup,
+      welcome: p.setup ? WELCOME : undefined,
       dry: this.apns.dry,
     };
   }

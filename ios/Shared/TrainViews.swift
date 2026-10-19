@@ -4,8 +4,8 @@ import SwiftUI
 // widget extension, so the app can show the same thing (its preview, and the CI's pictures of them).
 // Few numbers on purpose (Jordan, 16 Oct 2026: "there are so many numbers there"): the countdown, the time and how
 // late, the platform, and the one train after. No arrival time, and no "updated" unless the data has gone stale.
-// With a walk time set (Settings), the countdown is to when to set off ("Leave in") until that has passed, then to
-// the train ("Train leaves in"); the server decides which by sending `walk` or not.
+// The words and what the countdowns count to come from the server (`show`, 19 Oct 2026), so they change without a
+// new build; the `ContentState` extension below has the built-in wording for when it sends none.
 
 enum Board {
     /// A departure board's dark blue.
@@ -48,17 +48,45 @@ extension Train {
     }
 }
 
-/// Minutes and seconds to the expected departure, or to the time to set off for it when `walk` is given. The phone
-/// ticks it by itself between the server's updates. (A whole-minutes countdown that ticks by itself isn't reliable
-/// in a Live Activity on iOS 18.)
+/// What to say, from the server's `show` or else worked out here as before it sent one.
+extension TrainAttributes.ContentState {
+    var main: Train? { trains.first }
+    var title: String { show?.title ?? "To \(to)" }
+    var corner: String? { show?.corner ?? main?.plat.map { "Platform \($0)" } }
+    /// Instead of the countdown: "Cancelled"
+    var big: String? { show?.big ?? (main?.cancelled == true ? "Cancelled" : nil) }
+    var label: String { show?.label ?? (walk == nil ? "Train leaves in" : "Start walking in") }
+    var after: String { show?.after ?? (walk == nil ? "till it leaves" : "to start walking") }
+    /// What the big countdown counts to: leaving for the train, or the train itself.
+    var target: Double? { show?.until ?? main.map { $0.exp - Double((walk ?? 0) * 60) } }
+    var icon: String { show?.icon ?? (walk == nil ? "tram.fill" : "figure.walk") }
+    func time(_ t: Train) -> String { show?.time ?? Fmt.hm(t.dep) }
+    func status(_ t: Train) -> String { show?.status ?? t.statusText }
+    func tone(_ t: Train) -> Color { Board.tone(show?.tone) ?? t.statusColor }
+}
+
+extension Board {
+    static func tone(_ name: String?) -> Color? {
+        switch name {
+        case "green": return Color.green
+        case "orange": return Color.orange
+        case "red": return Color.red
+        case "white": return Color.white
+        case "accent": return Board.accent
+        default: return nil
+        }
+    }
+}
+
+/// Minutes and seconds to `until` (leaving, or the train). The phone ticks it by itself between the server's
+/// updates. (A whole-minutes countdown that ticks by itself isn't reliable in a Live Activity on iOS 18.)
 struct Countdown: View {
-    let train: Train
+    let until: Double
     /// When the data was fetched: the timer's range has to start no later than its end.
     let updated: Double
-    var walk: Int? = nil
 
     var body: some View {
-        let end = Date(timeIntervalSince1970: train.exp - Double((walk ?? 0) * 60))
+        let end = Date(timeIntervalSince1970: until)
         let start = min(Date(timeIntervalSince1970: updated), end)
         Text(timerInterval: start...end, countsDown: true, showsHours: false)
             .monospacedDigit()
@@ -93,6 +121,30 @@ struct ThenLine: View {
     }
 }
 
+/// The server's bottom line (`show.line`), in place of "Then …": "Walking to the 08:37? Leaves in 4:12"
+struct ExtraLine: View {
+    let state: TrainAttributes.ContentState
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(state.show?.line ?? "").foregroundStyle(Board.tone(state.show?.lineTone) ?? .secondary)
+            if let until = state.show?.lineUntil {
+                Countdown(until: until, updated: state.updated).fontWeight(.semibold).frame(maxWidth: 44, alignment: .leading)
+            }
+        }
+        .font(.caption)
+        .lineLimit(1)
+    }
+}
+
+/// "Then 17:57", or the server's line instead.
+struct BottomLine: View {
+    let state: TrainAttributes.ContentState
+    var body: some View {
+        if state.show?.line != nil { ExtraLine(state: state) }
+        else if state.trains.count > 1 { ThenLine(train: state.trains[1]) }
+    }
+}
+
 /// The lock screen (and the banner on phones without a Dynamic Island).
 struct LockScreenView: View {
     let state: TrainAttributes.ContentState
@@ -102,29 +154,29 @@ struct LockScreenView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "tram.fill").foregroundStyle(Board.accent)
-                Text("To \(state.to)").font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(state.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
-                if let plat = state.trains.first?.plat {
-                    Text("Platform \(plat)").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                if let corner = state.corner {
+                    Text(corner).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 }
             }
-            if let t = state.trains.first {
+            if let t = state.main {
                 HStack(alignment: .bottom) {
-                    if t.cancelled {
-                        Text("Cancelled").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.red)
-                    } else {
+                    if let big = state.big {
+                        Text(big).font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.red)
+                    } else if let until = state.target {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(state.walk == nil ? "Train leaves in" : "Leave in").font(.caption).foregroundStyle(.secondary)
-                            Countdown(train: t, updated: state.updated, walk: state.walk)
+                            Text(state.label).font(.caption).foregroundStyle(.secondary)
+                            Countdown(until: until, updated: state.updated)
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
                                 .frame(maxWidth: 130, alignment: .leading)
                         }
                     }
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 0) {
-                        Text(Fmt.hm(t.dep)).font(.title3.weight(.semibold)).monospacedDigit().strikethrough(t.cancelled)
+                        Text(state.time(t)).font(.title3.weight(.semibold)).monospacedDigit().strikethrough(t.cancelled)
                         if !t.cancelled {
-                            Text(t.statusText).font(.caption.weight(.semibold)).foregroundStyle(t.statusColor)
+                            Text(state.status(t)).font(.caption.weight(.semibold)).foregroundStyle(state.tone(t))
                         }
                     }
                     .padding(.bottom, 4)
@@ -135,9 +187,9 @@ struct LockScreenView: View {
             if let note = state.note, !state.trains.isEmpty {
                 Text(note).font(.caption).foregroundStyle(.orange)
             }
-            if state.trains.count > 1 || stale {
+            if state.trains.count > 1 || state.show?.line != nil || stale {
                 HStack {
-                    if state.trains.count > 1 { ThenLine(train: state.trains[1]) }
+                    BottomLine(state: state)
                     Spacer(minLength: 4)
                     if stale {
                         Text("Not updated since \(Fmt.hm(state.updated))").font(.caption2).foregroundStyle(.orange)
@@ -155,7 +207,7 @@ struct LockScreenView: View {
 struct IslandCompactLeading: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        Image(systemName: state.walk == nil ? "tram.fill" : "figure.walk")
+        Image(systemName: state.icon)
             .font(.caption)
             .foregroundStyle(Board.accent)
     }
@@ -164,13 +216,13 @@ struct IslandCompactLeading: View {
 struct IslandCompactTrailing: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        if let t = state.trains.first {
-            if t.cancelled {
+        if let t = state.main {
+            if state.big != nil {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-            } else {
-                Countdown(train: t, updated: state.updated, walk: state.walk)
+            } else if let until = state.target {
+                Countdown(until: until, updated: state.updated)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(t.statusColor)
+                    .foregroundStyle(state.tone(t))
                     .frame(maxWidth: 44)
             }
         } else {
@@ -182,10 +234,10 @@ struct IslandCompactTrailing: View {
 struct IslandMinimal: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        if let t = state.trains.first, !t.cancelled {
-            Countdown(train: t, updated: state.updated, walk: state.walk)
+        if let t = state.main, state.big == nil, let until = state.target {
+            Countdown(until: until, updated: state.updated)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(t.statusColor)
+                .foregroundStyle(state.tone(t))
                 .frame(maxWidth: 36)
         } else {
             Image(systemName: "tram.fill").foregroundStyle(Board.accent)
@@ -196,10 +248,11 @@ struct IslandMinimal: View {
 struct IslandExpandedLeading: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        if let t = state.trains.first {
+        if let t = state.main {
             VStack(alignment: .leading, spacing: 0) {
-                Text(Fmt.hm(t.dep)).font(.title2.weight(.bold)).monospacedDigit().strikethrough(t.cancelled)
-                Text(t.statusText).font(.caption.weight(.semibold)).foregroundStyle(t.statusColor)
+                Text(state.time(t)).font(.title2.weight(.bold)).monospacedDigit().strikethrough(t.cancelled)
+                Text(t.cancelled ? t.statusText : state.status(t)).font(.caption.weight(.semibold))
+                    .foregroundStyle(t.cancelled ? t.statusColor : state.tone(t))
             }
             .padding(.leading, 4)
         }
@@ -209,16 +262,16 @@ struct IslandExpandedLeading: View {
 struct IslandExpandedTrailing: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        if let t = state.trains.first {
-            if t.cancelled {
-                Text("Cancelled").font(.headline).foregroundStyle(.red)
-            } else {
+        if state.main != nil {
+            if let big = state.big {
+                Text(big).font(.headline).foregroundStyle(.red)
+            } else if let until = state.target {
                 VStack(alignment: .trailing, spacing: 0) {
-                    Countdown(train: t, updated: state.updated, walk: state.walk)
+                    Countdown(until: until, updated: state.updated)
                         .font(.title2.weight(.semibold))
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 90, alignment: .trailing)
-                    Text(state.walk == nil ? "till it leaves" : "till you leave").font(.caption).foregroundStyle(.secondary)
+                    Text(state.after).font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(.trailing, 4)
             }
@@ -229,7 +282,7 @@ struct IslandExpandedTrailing: View {
 struct IslandExpandedCenter: View {
     let state: TrainAttributes.ContentState
     var body: some View {
-        Text("To \(state.to)").font(.caption.weight(.semibold)).lineLimit(1)
+        Text(state.title).font(.caption.weight(.semibold)).lineLimit(1)
     }
 }
 
@@ -242,11 +295,11 @@ struct IslandExpandedBottom: View {
                 Text(state.note ?? "No trains right now").font(.caption)
             } else {
                 HStack {
-                    if let plat = state.trains.first?.plat {
-                        Text("Platform \(plat)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    if let corner = state.corner {
+                        Text(corner).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 4)
-                    if state.trains.count > 1 { ThenLine(train: state.trains[1]) }
+                    BottomLine(state: state)
                 }
             }
             if stale {
@@ -266,21 +319,21 @@ struct WatchView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Image(systemName: "tram.fill").foregroundStyle(Board.accent)
-                Text("To \(state.to)").font(.caption2.weight(.semibold)).lineLimit(1)
+                Text(state.title).font(.caption2.weight(.semibold)).lineLimit(1)
             }
-            if let t = state.trains.first {
-                if t.cancelled {
-                    Text("Cancelled").font(.title3.weight(.bold)).foregroundStyle(.red)
-                } else {
+            if let t = state.main {
+                if let big = state.big {
+                    Text(big).font(.title3.weight(.bold)).foregroundStyle(.red)
+                } else if let until = state.target {
                     HStack(spacing: 3) {
-                        if state.walk != nil { Image(systemName: "figure.walk").foregroundStyle(Board.accent) }
-                        Countdown(train: t, updated: state.updated, walk: state.walk)
+                        if state.icon != "tram.fill" { Image(systemName: state.icon).foregroundStyle(Board.accent) }
+                        Countdown(until: until, updated: state.updated)
                     }
                     .font(.title3.weight(.bold))
                 }
                 HStack(spacing: 4) {
-                    Text(Fmt.hm(t.dep)).monospacedDigit().strikethrough(t.cancelled)
-                    if !t.cancelled { Text(t.statusText).foregroundStyle(t.statusColor) }
+                    Text(state.time(t)).monospacedDigit().strikethrough(t.cancelled)
+                    if !t.cancelled { Text(state.status(t)).foregroundStyle(state.tone(t)) }
                 }
                 .font(.caption2.weight(.semibold))
                 .lineLimit(1)

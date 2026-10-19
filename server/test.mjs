@@ -139,7 +139,7 @@ test('estimate: from the last stop the train was logged at, to the half minute (
   assert.equal(estimate(early, MURATELLA), at('17:13:00') / 1000); // never before its time
 });
 
-test('walk time: "Leave in" for the next train you can still walk to; the ones out of reach are left out', () => {
+test('walk time: "Start walking in" for the next train you can still walk to; the ones out of reach are left out', () => {
   const a = { n: '1', dep: 1000, exp: 1000 + 10 * 60, delay: 0, dest: 'X', cancelled: false };
   const b = { ...a, n: '2', dep: a.dep + 15 * 60, exp: a.exp + 15 * 60 };
   const c = (s, trains = [a, b]) => liveContent({ from: { name: 'Muratella', walk: 8 }, to: { name: 'Roma Tuscolana' }, trains, now: s * 1000 });
@@ -284,11 +284,36 @@ test('phones: at most MAX_PHONES, and quiet ones are forgotten', async () => {
   assert.deepEqual(Object.keys(data.phones), [LEGACY]);
 });
 
+test('show: every word on the lock screen, and what the countdowns count to, from the server', () => {
+  const a = { n: '1', dep: 1000, exp: 1000 + 10 * 60, delay: 0, dest: 'X', cancelled: false, plat: '5' };
+  const b = { ...a, n: '2', dep: a.dep + 15 * 60, exp: a.exp + 15 * 60 + 120, delay: 2 };
+  const c = (s, trains = [a, b], walk = 8) => liveContent({ from: { name: 'Muratella', walk }, to: { name: 'Roma Tuscolana' }, trains, now: s * 1000 }).show;
+  assert.deepEqual(c(1000), { title: 'To Tuscolana', corner: 'Platform 5', time: hm(a.dep), status: 'on time', tone: 'green',
+    label: 'Start walking in', until: a.exp - 8 * 60, after: 'to start walking', icon: 'figure.walk' });
+  const later = c(1000 + 3 * 60); // too late to set off for the first: on the way to it, or walking for the next
+  assert.equal(later.label, 'Start walking in');
+  assert.equal(later.until, b.exp - 8 * 60);
+  assert.equal(later.status, '2 min late');
+  assert.equal(later.tone, 'orange');
+  assert.equal(later.line, `Walking to the ${hm(a.dep)}? Leaves in`);
+  assert.equal(later.lineUntil, a.exp);
+  assert.equal(c(1000 + 11 * 60).line, undefined); // it has left
+  assert.equal(c(1000, [a, b], 0).label, 'Train leaves in');
+  assert.equal(c(1000, [a, b], 0).until, a.exp);
+  assert.equal(c(1000, [{ ...a, cancelled: true }], 0).big, 'Cancelled');
+  assert.equal(c(1000, [{ ...a, cancelled: true }], 0).until, undefined);
+  assert.deepEqual(c(1000, []), { title: 'To Tuscolana' });
+  const content = s => liveContent({ from: { name: 'Muratella', walk: 8 }, to: { name: 'Roma Tuscolana' }, trains: [a, b], now: s * 1000 });
+  assert.equal(change(content(1000 + 10 * 60 - 1), content(1000 + 10 * 60 + 1)), 'high'); // the walking-to line goes at once
+});
+
 test('phones: the snapshot is the asking phone\'s own', async () => {
   const { phones } = world();
   const bob = phones.ensure(BOB);
   const snap = await phones.snapshot(bob, 'home');
   assert.equal(snap.setup, true);
+  assert.match(snap.welcome, /^Welcome!/);
+  assert.equal((await phones.snapshot(phones.get(LEGACY), 'home')).welcome, undefined);
   assert.equal(snap.registered, 0);
   assert.notEqual(snap.channel, 'jordan-home');
   assert.equal((await phones.snapshot(phones.get(LEGACY), 'home')).channel, 'jordan-home');

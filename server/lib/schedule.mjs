@@ -50,7 +50,7 @@ export const short = name => (name || '').replace(/^Roma\s+/i, '');
 // rules and a Swift Date would expect seconds since 2001.
 export function liveContent({ from, to, trains, now = Date.now(), note }) {
   // Minutes from setting off to standing on the platform (Settings, per station). The countdown is to when to set
-  // off ("Leave in") for the next train you can still walk to, and the ones you can't reach any more are left out:
+  // off ("Start walking in") for the next train you can still walk to, and the ones you can't reach any more are left out:
   // with a train every 15 minutes and a 13-minute walk, counting to the first train mostly showed one you'd miss
   // (Jordan, 19 Oct 2026). No walk set, or no train left that you can reach: it counts to the train itself.
   const walk = from.walk || 0, s = now / 1000;
@@ -73,7 +73,31 @@ export function liveContent({ from, to, trains, now = Date.now(), note }) {
   else if (!trains.length) state.note = 'No trains in the next hour';
   else if (cancelled.length) state.note = `${cancelled.map(t => hm(t.dep)).join(', ')} cancelled`;
   if (i >= 0) state.walk = walk;
+  state.show = show(state, trains, s);
   return state;
+}
+
+// Every word the Live Activity shows, and what its countdowns count to (`Show` in ios/Shared/TrainAttributes.swift,
+// read by builds from 19 Oct 2026; older ones ignore it and word things themselves from `trains` and `walk`).
+function show(state, trains, s) {
+  const t = state.trains[0], out = { title: `To ${state.to}` };
+  if (!t) return out;
+  if (t.plat) out.corner = `Platform ${t.plat}`;
+  out.time = hm(t.dep);
+  if (t.cancelled) out.big = 'Cancelled';
+  else {
+    Object.assign(out, { status: t.delay > 0 ? `${t.delay} min late` : 'on time', tone: t.delay >= 5 ? 'red' : t.delay > 0 ? 'orange' : 'green' });
+    Object.assign(out, state.walk
+      ? { label: 'Start walking in', until: t.exp - state.walk * 60, after: 'to start walking', icon: 'figure.walk' }
+      : { label: 'Train leaves in', until: t.exp, after: 'till it leaves', icon: 'tram.fill' });
+  }
+  // The train you're walking to if you set off in time for it: too late to leave for it now, but it hasn't gone.
+  const way = state.walk && trains.find(x => !x.cancelled && s >= x.exp - state.walk * 60 && s < x.exp);
+  if (way) {
+    const plat = way.plat && way.plat !== t.plat ? ` · platform ${way.plat}` : '';
+    Object.assign(out, { line: `Walking to the ${hm(way.dep)}${way.delay ? ` +${way.delay}` : ''}${plat}? Leaves in`, lineUntil: way.exp });
+  }
+  return out;
 }
 
 // What changed between two content-states, to choose the push priority: 10 (now, counts against Apple's budget)
@@ -85,6 +109,7 @@ export function change(prev, next) {
   const a = prev.trains[0], b = next.trains[0];
   if (!a || !b || a.n !== b.n || a.delay !== b.delay || a.plat !== b.plat || a.cancelled !== b.cancelled) return 'high';
   if (Math.abs(a.exp - b.exp) >= 60 || prev.walk !== next.walk || prev.note !== next.note) return 'high';
+  if (prev.show?.line !== next.show?.line) return 'high';
   return 'low';
 }
 

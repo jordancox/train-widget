@@ -12,12 +12,9 @@ struct ContentView: View {
                     Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
                 }
                 if let snap = model.snap {
-                    if snap.setup == true {
+                    if let welcome = snap.welcome ?? (snap.setup == true ? Snapshot.welcome : nil) {
                         Section {
-                            Button { showSettings = true } label: {
-                                Label("Welcome! Set your home station, the walk to each platform, and when it should turn up on your lock screen by itself.",
-                                      systemImage: "hand.wave.fill")
-                            }
+                            Button { showSettings = true } label: { Label(welcome, systemImage: "hand.wave.fill") }
                         }
                     }
                     trainsSection(snap)
@@ -146,7 +143,7 @@ struct TrainRow: View {
             }
             Spacer()
             if !train.cancelled {
-                Countdown(train: train, updated: now)
+                Countdown(until: train.exp, updated: now)
                     .font(.title3.weight(.semibold))
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: 80, alignment: .trailing)
