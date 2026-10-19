@@ -11,7 +11,7 @@ import { rome, dueWindow, nextStart, autoFrom, liveContent, change, startAlert, 
 export const LEGACY = 'legacy';
 export const MAX_PHONES = 20;
 // The line at the top of the app on a phone that hasn't saved its own settings yet; tapping it opens Settings.
-export const WELCOME = 'Welcome! Set your home station, the walk to each platform, and when it should turn up on your lock screen by itself.';
+export const WELCOME = 'Hello friends. In the settings menu, set your home station, how long it takes you to walk to that platform, and when this app should turn up on your lock screen by itself.';
 const CHECK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60, DAY = 86400e3;
 
 const other = from => (from === 'home' ? 'work' : 'home');

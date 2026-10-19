@@ -312,7 +312,7 @@ test('phones: the snapshot is the asking phone\'s own', async () => {
   const bob = phones.ensure(BOB);
   const snap = await phones.snapshot(bob, 'home');
   assert.equal(snap.setup, true);
-  assert.match(snap.welcome, /^Welcome!/);
+  assert.match(snap.welcome, /^Hello friends\./);
   assert.equal((await phones.snapshot(phones.get(LEGACY), 'home')).welcome, undefined);
   assert.equal(snap.registered, 0);
   assert.notEqual(snap.channel, 'jordan-home');
