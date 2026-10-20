@@ -23,7 +23,7 @@ final class Model: ObservableObject {
 
     func refresh() async {
         defer { refreshLiveHere() }
-        if demo { snap = Demo.snapshot(from: choice ?? "home"); return }
+        if demo { snap = Demo.snapshot(from: choice ?? "home", live: Self.activityHere); return }
         guard api.configured else { error = "This build has no server secret: it needs the cloud build."; return }
         loading = true
         defer { loading = false }
@@ -37,12 +37,15 @@ final class Model: ObservableObject {
         }
     }
 
-    func refreshLiveHere() {
-        liveHere = Activity<TrainAttributes>.activities.contains { $0.activityState == .active || $0.activityState == .stale }
+    func refreshLiveHere() { liveHere = Self.activityHere }
+
+    static var activityHere: Bool {
+        Activity<TrainAttributes>.activities.contains { $0.activityState == .active || $0.activityState == .stale }
     }
 
     /// Puts the trains on the lock screen now, and asks the server to keep them up to date.
     func startLive() async {
+        defer { refreshLiveHere() } // the switch was flicked on already: this puts it back if it didn't start
         guard let snap else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             error = "Live Activities are off for Treni: Settings → Treni → Live Activities."
@@ -54,14 +57,13 @@ final class Model: ObservableObject {
             // A channel the server hasn't really made (no push key yet, or the demo) would stop it starting at all.
             let push: PushType? = snap.dry || demo ? nil : .channel(snap.channel)
             _ = try Activity.request(attributes: TrainAttributes(window: "manual", from: snap.from), content: content, pushType: push)
-            if !demo {
+            if demo { await refresh() } else {
                 self.snap = try await api.call("POST", "/api/live", body: LiveRequest(from: snap.from))
             }
             error = nil
         } catch {
             self.error = "Couldn't put it on the lock screen: \(error.localizedDescription)"
         }
-        refreshLiveHere()
     }
 
     func stopLive() async {
@@ -70,8 +72,10 @@ final class Model: ObservableObject {
         await refresh()
     }
 
-    /// No automatic start today (working from home, a day off).
+    /// No automatic start today (working from home, a day off). The switch moves at once; the server's answer
+    /// (or the next refresh, if it fails) settles it.
     func skipToday() async {
+        if let today = snap?.today { snap?.settings.skip = Array(Set((snap?.settings.skip ?? []) + [today])).sorted() }
         guard !demo else { return }
         do {
             _ = try await api.call("POST", "/api/skip", as: TreniSettings.self)
@@ -83,6 +87,7 @@ final class Model: ObservableObject {
     }
 
     func unskip(_ date: String) async {
+        snap?.settings.skip?.removeAll { $0 == date }
         guard !demo else { return }
         _ = try? await api.call("DELETE", "/api/skip", query: ["date": date], as: TreniSettings.self)
         await refresh()

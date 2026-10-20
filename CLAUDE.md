@@ -39,7 +39,10 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   channel ends every activity on it. Every 45 s it
   re-reads the trains and broadcasts when something changes (priority 10 if it changes what you'd do, 5 otherwise),
   plus every 4 min so the stale date moves on; it ends the activity when the window closes. The countdown ticks on
-  the phone by itself. The app can start one by hand, stop it, or skip today.
+  the phone by itself. The app can start one by hand, stop it, or skip today: two switches since 20 Oct 2026 ("On
+  the lock screen now", "Start by itself today"), each with a line under it saying where things stand. As buttons
+  worded like statuses ("Day off today: don't start by itself"), a tester turned a day off without knowing and
+  wondered why nothing came up. The CI shoots both sides (`app-dayoff.png`, `app-live-bottom.png`).
 - **Several phones** (17 Oct 2026, for 5–6 colleagues through TestFlight): the app sends a random id it makes once
   (`X-Treni-Phone`, `API.phone`); a new phone starts from `defaults.json` with nothing starting by itself and a
   welcome line until it saves its own Settings. Build 13 and older send no id and get the `legacy` record (Jordan's,

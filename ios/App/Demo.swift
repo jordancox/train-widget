@@ -29,16 +29,22 @@ enum Demo {
         return .init(from: Fmt.short(a.name), to: Fmt.short(b.name), trains: Array(trains.prefix(3)), updated: now, note: note, walk: walk)
     }
 
-    static func snapshot(from: String) -> Snapshot {
+    /// -dayoff: today is a day off (the switch's other side, for ci/sim-shots.sh). `live`: a Live Activity is up
+    /// here, until 09:00.
+    static func snapshot(from: String, live: Bool = false) -> Snapshot {
         let list = trains(from: from)
+        let now = Date().timeIntervalSince1970
+        let dayoff = ProcessInfo.processInfo.arguments.contains("-dayoff")
         let settings = TreniSettings(home: home, work: work, windows: [
             TripWindow(id: "morning", from: "home", start: "07:30", end: "09:00", days: [1, 2, 3, 4, 5], on: true),
             TripWindow(id: "evening", from: "work", start: "16:45", end: "18:45", days: [1, 2, 3, 4, 5], on: true),
-        ], skip: [])
-        return Snapshot(now: Date().timeIntervalSince1970, from: from, settings: settings, trains: list,
-                        content: content(from: from, trains: list), channel: "demo", live: nil,
-                        next: .init(id: "morning", date: "2026-10-19", dow: 1, start: "07:30"),
-                        today: "2026-10-16", registered: 1, dry: true)
+        ], skip: dayoff ? ["2026-10-19"] : [])
+        return Snapshot(now: now, from: from, settings: settings, trains: list,
+                        content: content(from: from, trains: list), channel: "demo",
+                        live: live ? .init(kind: "manual", from: from, until: now + 55 * 60) : nil,
+                        next: dayoff ? .init(id: "morning", date: "2026-10-20", dow: 2, start: "07:30")
+                                     : .init(id: "evening", date: "2026-10-19", dow: 1, start: "16:45"),
+                        today: "2026-10-19", registered: 1, dry: true)
     }
 }
 
