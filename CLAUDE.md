@@ -52,7 +52,7 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   68c9eb, 9d5fd2); they aren't Jordan's. Jordan's phone is **5c83f4** since he reinstalled the app on 19 Oct 2026.
 - **Reinstalling** (20 Oct 2026): builds up to 21 keep the id only in UserDefaults, which a delete wipes, so a
   reinstall turns up as a new phone with nothing starting by itself. Apple still answered 200 to the deleted copy's
-  push-to-start token, so the server logged "started" and Jordan's morning activity never appeared. The next build
+  push-to-start token, so the server logged "started" and Jordan's morning activity never appeared. Build 24 on
   keeps the id in the Keychain too (`PhoneID` in `ios/App/API.swift`; checked by a reinstall in
   `ios/ci/sim-shots.sh`). `--phones` shows `app`, when the app itself last called in; `seen` also moves when Apple
   takes a start.
