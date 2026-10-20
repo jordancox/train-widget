@@ -46,7 +46,13 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   moved over from the single-phone files); a newer build takes it over when it registers the same push-to-start
   token. At most 20 phones; a phone is forgotten a month after its token goes, or after four months unused. Apple's beta
   reviewers turn up as phones of their own, doing what the review notes say (three on 17–19 Oct 2026: 4ff289,
-  68c9eb, 9d5fd2); they aren't Jordan's.
+  68c9eb, 9d5fd2); they aren't Jordan's. Jordan's phone is **5c83f4** since he reinstalled the app on 19 Oct 2026.
+- **Reinstalling** (20 Oct 2026): builds up to 21 keep the id only in UserDefaults, which a delete wipes, so a
+  reinstall turns up as a new phone with nothing starting by itself. Apple still answered 200 to the deleted copy's
+  push-to-start token, so the server logged "started" and Jordan's morning activity never appeared. The next build
+  keeps the id in the Keychain too (`PhoneID` in `ios/App/API.swift`; checked by a reinstall in
+  `ios/ci/sim-shots.sh`). `--phones` shows `app`, when the app itself last called in; `seen` also moves when Apple
+  takes a start.
 - **Walk time** (Settings, per station: home 13, work 8 minutes, from Jordan's guess on 16 Oct 2026): the
   content-state carries `walk` and the countdown is to when to set off ("Start walking in") for the next train you
   can still walk to; trains out of reach are left out of the content-state, and a cancelled one you'd have gone for

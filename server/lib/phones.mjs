@@ -62,7 +62,9 @@ export class Phones {
       this.save();
       this.log('new phone', this.label(p));
     }
-    p.seen = this.now();
+    // `app`: the app itself called in. `seen` also moves on when Apple takes a start, which it kept doing for a
+    // deleted copy (20 Oct 2026), so only `app` shows a copy that's gone.
+    p.seen = p.app = this.now();
     return p;
   }
 

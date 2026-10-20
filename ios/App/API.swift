@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// The Treni server on the VM (server/treni.mjs), at treni.jordancox.org. Every call carries the shared secret,
 /// which the cloud build puts in Info.plist from the repo's secrets (TRENI_SECRET); it's never in the repo.
@@ -15,11 +16,14 @@ struct API {
     var configured: Bool { !secret.isEmpty }
 
     /// This phone's id on the server: random, made once and kept. Each phone has its own settings and Live Activity
-    /// there (server/lib/phones.mjs).
+    /// there (server/lib/phones.mjs). Kept in the Keychain, which iOS keeps when the app is deleted, so a reinstall
+    /// is still the same phone with the same automatic starts (20 Oct 2026: a reinstall made Jordan a new phone with
+    /// nothing starting by itself, while the server went on starting the deleted copy's). Also in UserDefaults, where
+    /// builds before that kept it, so they keep their id, and for a launch before the phone is first unlocked.
     static let phone: String = {
-        if let id = UserDefaults.standard.string(forKey: "phone") { return id }
-        let id = UUID().uuidString.lowercased()
+        let id = PhoneID.read() ?? UserDefaults.standard.string(forKey: "phone") ?? UUID().uuidString.lowercased()
         UserDefaults.standard.set(id, forKey: "phone")
+        PhoneID.keep(id)
         return id
     }()
 
@@ -43,6 +47,34 @@ struct API {
             throw APIError(message: "The train server said: \(message) (\(status))")
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+}
+
+/// The phone id in the Keychain: this device only (not carried to a new iPhone by a backup, where the UserDefaults
+/// copy does that), readable once the phone has been unlocked after a restart.
+enum PhoneID {
+    private static let item: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "org.jordancox.treni",
+        kSecAttrAccount as String: "phone",
+    ]
+
+    static func read() -> String? {
+        var query = item
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Saves it unless it's there already. Says why when it can't (the simulator check reads it, ios/ci/sim-shots.sh).
+    static func keep(_ id: String) {
+        var add = item
+        add[kSecValueData as String] = Data(id.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(add as CFDictionary, nil)
+        if status != errSecSuccess && status != errSecDuplicateItem { print("keychain: phone id not kept, OSStatus \(status)") }
     }
 }
 

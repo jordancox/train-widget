@@ -13,7 +13,7 @@
 //
 //   node treni.mjs           the server
 //   node treni.mjs --print   what each phone's Live Activity would show now, both ways, then exit
-//   node treni.mjs --phones  who's on it: stations, walk times, automatic starts, last seen
+//   node treni.mjs --phones  who's on it: stations, walk times, automatic starts, last seen, when the app last called
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -152,7 +152,7 @@ if (process.argv.includes('--phones')) {
   for (const p of phones.list) {
     const s = p.settings, on = s.windows.filter(w => w.on).map(w => `${w.from === 'home' ? '→' : '←'}${w.start}`).join(' ') || 'nothing by itself';
     console.log(`${phones.label(p).padEnd(22)} ${short(s.home.name)} ${s.home.walk ?? 0}′ ⇄ ${short(s.work.name)} ${s.work.walk ?? 0}′  ${on}${p.setup ? '  (not set up)' : ''}` +
-      `  tokens ${Object.keys(p.tokens).length}  seen ${hm(p.seen)}${p.live ? `  LIVE ${p.live.from}` : ''}`);
+      `  tokens ${Object.keys(p.tokens).length}  seen ${hm(p.seen)}  app ${p.app ? hm(p.app) : '?'}${p.live ? `  LIVE ${p.live.from}` : ''}`);
   }
   process.exit(0);
 }

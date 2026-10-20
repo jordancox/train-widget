@@ -225,7 +225,10 @@ test('phones: each starts at its own time, on its own token and channel', async 
   assert.equal(starts[0].aps['content-state'].walk, 13);
   assert.equal(data.phones[BOB].live, null);
 
+  const opened = bob.app;
   await later(30); // 08:00:10: Bob's
+  assert.equal(data.phones[BOB].app, opened); // a start Apple took isn't the app calling in (a deleted copy, 20 Oct 2026)
+  assert.ok(data.phones[BOB].seen > opened);
   const bobStart = sent.filter(x => x.kind === 'start')[1];
   assert.equal(bobStart.token, TOKEN_B);
   assert.equal(bobStart.aps['content-state'].from, 'Ostiense');

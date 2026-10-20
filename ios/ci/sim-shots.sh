@@ -37,3 +37,21 @@ xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null; sleep 4; shot isla
 # The island is sometimes slow to show up (16 Oct 2026): a second try.
 sleep 6; shot island-2
 xcrun simctl terminate "$UDID" "$ID" || true
+
+# A reinstall is still the same phone: its id comes back from the Keychain. On 20 Oct 2026 a reinstall made Jordan a
+# new phone on the server with nothing starting by itself, while the server went on starting the deleted copy's.
+phone_id() {
+  launch "$1" -demo -phone
+  for _ in $(seq 20); do grep -q '^phone ' "$OUT/$1.log" 2>/dev/null && break; sleep 0.5; done
+  sed -n 's/^phone \([^ ]*\).*/\1/p' "$OUT/$1.log" | head -1
+}
+first=$(phone_id phone-1)
+xcrun simctl uninstall "$UDID" "$ID"
+xcrun simctl install "$UDID" "$APP"
+again=$(phone_id phone-2)
+cat "$OUT/phone-1.log" "$OUT/phone-2.log"
+if [ -z "$first" ] || [ "$first" != "$again" ]; then
+  echo "::error::a reinstall made a new phone id (${first:-none} → ${again:-none}): it should come back from the Keychain"
+  exit 1
+fi
+echo "phone id kept through a reinstall: $first"
