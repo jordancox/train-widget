@@ -48,7 +48,14 @@ export const short = name => (name || '').replace(/^Roma\s+/i, '');
 // The Live Activity's content-state. Its fields match TrainAttributes.ContentState in the app
 // (ios/Shared/TrainAttributes.swift); times are Unix seconds, because iOS decodes these with its default JSON
 // rules and a Swift Date would expect seconds since 2001.
-export function liveContent({ from, to, trains, now = Date.now(), note }) {
+export function liveContent({ from, to, trains, now = Date.now(), note, walking }) {
+  // Said "Yes, I'm walking to the 08:37" on the Live Activity (`walking`: { n, dep }, 26 Oct 2026): past the front
+  // door, so it counts to the trains themselves, from that one on. Until then nothing can tell which train you've set
+  // off for: with a 13-minute walk and a train every 15 minutes, there's one you may be walking to 13 minutes in 15.
+  if (walking) {
+    trains = trains.filter(t => t.n === walking.n || t.dep >= walking.dep);
+    from = { ...from, walk: 0 };
+  }
   // Minutes from setting off to standing on the platform (Settings, per station). The countdown is to when to set
   // off ("Start walking in") for the next train you can still walk to, and the ones you can't reach any more are left out:
   // with a train every 15 minutes and a 13-minute walk, counting to the first train mostly showed one you'd miss
@@ -73,13 +80,13 @@ export function liveContent({ from, to, trains, now = Date.now(), note }) {
   else if (!trains.length) state.note = 'No trains in the next hour';
   else if (cancelled.length) state.note = `${cancelled.map(t => hm(t.dep)).join(', ')} cancelled`;
   if (i >= 0) state.walk = walk;
-  state.show = show(state, trains, s);
+  state.show = show(state, trains, s, walking);
   return state;
 }
 
 // Every word the Live Activity shows, and what its countdowns count to (`Show` in ios/Shared/TrainAttributes.swift,
 // read by builds from 19 Oct 2026; older ones ignore it and word things themselves from `trains` and `walk`).
-function show(state, trains, s) {
+function show(state, trains, s, walking) {
   const t = state.trains[0], out = { title: `To ${state.to}` };
   if (!t) return out;
   if (t.plat) out.corner = `Platform ${t.plat}`;
@@ -96,7 +103,11 @@ function show(state, trains, s) {
   if (way) {
     const plat = way.plat && way.plat !== t.plat ? ` · platform ${way.plat}` : '';
     Object.assign(out, { line: `Walking to the ${hm(way.dep)}${way.delay ? ` +${way.delay}` : ''}${plat}? Leaves in`, lineUntil: way.exp });
+    // A button that answers it (builds from 26 Oct 2026): the countdown then goes to that train.
+    Object.assign(out, { button: 'Yes', buttonWatch: `I'm walking to the ${hm(way.dep)}`, buttonTrain: way.n });
   }
+  // Back to counting to when to set off (pressed by mistake, or went back home).
+  if (walking) Object.assign(out, { button: 'Undo', buttonTrain: '' });
   return out;
 }
 
@@ -109,7 +120,7 @@ export function change(prev, next) {
   const a = prev.trains[0], b = next.trains[0];
   if (!a || !b || a.n !== b.n || a.delay !== b.delay || a.plat !== b.plat || a.cancelled !== b.cancelled) return 'high';
   if (Math.abs(a.exp - b.exp) >= 60 || prev.walk !== next.walk || prev.note !== next.note) return 'high';
-  if (prev.show?.line !== next.show?.line) return 'high';
+  if (prev.show?.line !== next.show?.line || prev.show?.buttonTrain !== next.show?.buttonTrain) return 'high';
   return 'low';
 }
 

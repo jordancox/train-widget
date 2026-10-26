@@ -76,9 +76,16 @@ enum Shots {
         // Set off in time for the first train, so on the way to it; the countdown is already to leaving for the next
         // (the server's `show`, as lib/schedule.mjs words it).
         var onWay = Demo.content(from: "home", trains: Array(list.dropFirst()), walk: 13)
-        onWay.show = Show(line: "Walking to the \(Fmt.hm(list[0].dep)) +2? Leaves in", lineUntil: list[0].exp)
+        onWay.show = Show(line: "Walking to the \(Fmt.hm(list[0].dep)) +2? Leaves in", lineUntil: list[0].exp,
+                          button: "Yes", buttonWatch: "I'm walking to the \(Fmt.hm(list[0].dep))", buttonTrain: list[0].n)
         save("lock-onway", width: 370, lock(onWay))
         save("island-onway", width: 370, island(onWay))
+        save("watch-onway", width: 184, watch(onWay))
+        // After "Yes": counting to that train, with Undo.
+        var walking = Demo.content(from: "home", trains: list)
+        walking.show = Show(label: "Train leaves in", until: list[0].exp, button: "Undo", buttonTrain: "")
+        save("lock-walking", width: 370, lock(walking))
+        save("watch-walking", width: 184, watch(walking))
         save("island-expanded", width: 370, island(s))
         save("island-compact", width: 250,
              HStack {
@@ -89,7 +96,7 @@ enum Shots {
              .padding(.horizontal, 14)
              .frame(height: 37)
              .background(.black, in: Capsule()))
-        save("watch", width: 184, WatchView(state: s).padding(10).background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 20)))
+        save("watch", width: 184, watch(s))
         // For the promo sheet (../promo/): a whole lock screen and a Watch face, drawn here to have Apple's fonts.
         save("promo-lock", width: 402, PromoLock(state: s).frame(height: 874))
         save("promo-watch", width: 208, PromoWatch(state: s).frame(height: 248))
@@ -97,6 +104,10 @@ enum Shots {
 
     private static func lock(_ s: TrainAttributes.ContentState, stale: Bool = false) -> some View {
         LockScreenView(state: s, stale: stale).background(Board.background, in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private static func watch(_ s: TrainAttributes.ContentState) -> some View {
+        WatchView(state: s).padding(10).background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 20))
     }
 
     private static func island(_ s: TrainAttributes.ContentState) -> some View {

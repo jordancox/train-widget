@@ -65,6 +65,19 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   showed for about 2 minutes in 15 (Jordan: "the whole leave desk logic thing is flawed"). Walking words and train
   words stay apart (Jordan: "'leave in' could be construed as train time not me time"). Around those moments the
   server checks every 15 s instead of 45.
+- **"Yes, I'm walking to this one"** (26 Oct 2026, builds from 25): nothing can tell which train you've set off for
+  (13-minute walk, a train every 15 minutes: there's one you may be walking to 13 minutes in 15), so on the way the
+  big number was when to leave home for the *next* train, and the Watch doesn't even show the bottom line (Jordan:
+  "it's not super clear what is what"). Location was ruled out (the school run, an "always" location prompt for
+  colleagues). Now the bottom line's "Walking to the 08:37?" has a **Yes** button, and the Watch an "I'm walking to
+  the 08:37" one in the title's place; from then on it counts to that train and the ones after it, not the walk, with
+  **Undo**. The tap runs `WalkingTo` (`ios/Shared/WalkingTo.swift`, a LiveActivityIntent, so it runs in the app even
+  from the Watch) → `POST /api/walking` → `p.live.walking`, and the answer goes on the lock screen at once. The
+  button's words and train are in `show` (`button`, `buttonWatch`, `buttonTrain`).
+- **Apple refusing updates** (429 "TooManyRequests"; Apple publishes no limit): seen on 20, 23 and 26 Oct 2026, a
+  colleague's card frozen from 07:58 to 09:00 while the server retried urgently every 15–45 s. Since 26 Oct the server
+  waits 1, 2, 4, 8 minutes, retries at the low priority and stays low for 15 minutes after; the log says once when it
+  starts and when it ends, and each ended card's log line counts its urgent pushes, to learn where the limit is.
 - **The wording is the server's** (19 Oct 2026, build 21 on): the content-state's `show` carries every word the Live
   Activity shows and what each countdown counts to (`show()` in `lib/schedule.mjs`), so wording changes need no
   build; the app falls back to its own words when a field is missing, and older builds ignore `show`. The welcome

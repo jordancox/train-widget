@@ -9,7 +9,8 @@
 // (push-to-start, subscribed to the phone's broadcast channel for that direction), checks the trains every 45
 // seconds (every 15 around the time to set off and the departure), pushes when something changes (and every 4
 // minutes anyway, so the phone knows it's fresh), and ends it when the window closes.
-// The app can also start one by hand (POST /api/live), stop it (DELETE /api/live) or skip today.
+// The app can also start one by hand (POST /api/live), stop it (DELETE /api/live) or skip today, and the Live
+// Activity's "Yes, I'm walking to the 08:37" button says which train you've set off for (POST /api/walking).
 //
 //   node treni.mjs           the server
 //   node treni.mjs --print   what each phone's Live Activity would show now, both ways, then exit
@@ -107,6 +108,15 @@ const routes = {
     if (!['home', 'work'].includes(from)) return send(res, 400, { error: 'from' });
     await phones.startLive(p, from, minutes);
     send(res, 200, await phones.snapshot(p, from));
+  },
+  // The Live Activity's buttons (builds from 26 Oct 2026): { train: '20423' } walking to it, { train: '' } not.
+  'POST /api/walking': async (req, res, q, p) => {
+    const { train } = await body(req);
+    if (typeof train !== 'string' || !/^\w{0,12}$/.test(train)) return send(res, 400, { error: 'train' });
+    if (!p.live) return send(res, 409, { error: 'nothing on the lock screen' });
+    const content = await phones.walkingTo(p, train);
+    if (!content) return send(res, 502, { error: 'no train times just now' });
+    send(res, 200, { from: p.live.from, content });
   },
   'DELETE /api/live': async (req, res, q, p) => {
     await phones.stopLive(p);

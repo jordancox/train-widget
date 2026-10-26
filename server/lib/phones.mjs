@@ -6,13 +6,13 @@
 // The app sends a random phone id with every call (X-Treni-Phone). Builds before that (13 and older, Jordan's only)
 // send none and get the LEGACY record; a newer build claims it when it registers the same push-to-start token.
 // Kept in state.json (version 2) by the caller's save(). Tested in ../test.mjs with fake trains and a fake APNs.
-import { rome, dueWindow, nextStart, autoFrom, liveContent, change, startAlert, validSettings, short } from './schedule.mjs';
+import { rome, dueWindow, nextStart, autoFrom, liveContent, change, startAlert, validSettings, short, hm } from './schedule.mjs';
 
 export const LEGACY = 'legacy';
 export const MAX_PHONES = 20;
 // The line at the top of the app on a phone that hasn't saved its own settings yet; tapping it opens Settings.
 export const WELCOME = 'Hello friends. In the settings menu, set your home station, how long it takes you to walk to that platform, and when this app should turn up on your lock screen by itself.';
-const CHECK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60, DAY = 86400e3;
+const CHECK = 45e3, HEARTBEAT = 4 * 60e3, STALE = 12 * 60, DAY = 86400e3, CALM = 15 * 60e3;
 
 const other = from => (from === 'home' ? 'work' : 'home');
 const tokenGone = r => r.status === 410 || (r.status === 400 && /BadDeviceToken|ExpiredToken/.test(JSON.stringify(r.body)));
@@ -78,7 +78,8 @@ export class Phones {
   }
 
   async content(p, from) {
-    return liveContent({ from: p.settings[from], to: p.settings[other(from)], trains: await this.trains(p, from), now: this.now() });
+    const walking = p.live?.from === from ? p.live.walking : undefined;
+    return liveContent({ from: p.settings[from], to: p.settings[other(from)], trains: await this.trains(p, from), now: this.now(), walking });
   }
 
   async channel(p, from) {
@@ -128,11 +129,28 @@ export class Phones {
       c = { ...live.last, note: 'Live train data paused', updated: this.secs() };
     }
     const what = change(live.last, c);
-    if (!what && !force && this.now() - live.lastPushAt < HEARTBEAT) return;
+    if (!what && !force && this.now() - live.lastPushAt < HEARTBEAT) return c;
+    // Apple refused an update for too many (429, "TooManyRequests"; Apple publishes no limit). Until 26 Oct 2026 the
+    // server tried again every 15 seconds, urgently, and a colleague's lock screen stayed frozen for the hour. Now it
+    // waits (1, 2, 4, then 8 minutes) and stays at the low priority for a quarter of an hour after it gets through.
+    const t = live.throttled;
+    if (t && !force && this.now() < t.until) return c;
+    const prio = what === 'high' && !t && !(this.now() < live.calmUntil) ? 10 : 5;
     const aps = { timestamp: this.secs(), event: 'update', 'content-state': c, 'stale-date': this.secs() + STALE };
-    const r = await this.apns.broadcast(await this.channel(p, live.from), aps, what === 'high' ? 10 : 5);
-    if (r.status === 200) { live.last = c; live.lastPushAt = this.now(); live.pushes++; }
-    else this.log(this.label(p), 'update refused', r.status, JSON.stringify(r.body));
+    const r = await this.apns.broadcast(await this.channel(p, live.from), aps, prio);
+    if (r.status === 200) {
+      Object.assign(live, { last: c, lastPushAt: this.now(), pushes: live.pushes + 1, urgent: (live.urgent || 0) + (prio === 10) });
+      if (t) {
+        this.log(`${this.label(p)} updates go through again, after ${Math.round((this.now() - t.since) / 60e3)} min refused for too many`);
+        delete live.throttled;
+        live.calmUntil = this.now() + CALM;
+      }
+    } else if (r.status === 429) {
+      const wait = Math.min((t?.wait || 30e3) * 2, 8 * 60e3);
+      live.throttled = { since: t?.since || this.now(), wait, until: this.now() + wait };
+      if (!t) this.log(`${this.label(p)} Apple refused an update for too many (429) after ${live.pushes} pushes, ${live.urgent || 0} urgent: waiting`);
+    } else this.log(this.label(p), 'update refused', r.status, JSON.stringify(r.body));
+    return c;
   }
 
   async endLive(p, why) {
@@ -142,7 +160,7 @@ export class Phones {
     const aps = { timestamp: this.secs(), event: 'end', 'dismissal-date': this.secs() + 60 };
     if (live.last) aps['content-state'] = { ...live.last, updated: this.secs() };
     const r = await this.apns.broadcast(await this.channel(p, live.from), aps, 10, 60);
-    this.log(`${this.label(p)} ended (${why}) after ${live.pushes} pushes`, r.status === 200 ? '' : `— refused ${r.status} ${JSON.stringify(r.body)}`);
+    this.log(`${this.label(p)} ended (${why}) after ${live.pushes} pushes, ${live.urgent || 0} urgent`, r.status === 200 ? '' : `— refused ${r.status} ${JSON.stringify(r.body)}`);
   }
 
   async tickPhone(p, now) {
@@ -186,7 +204,7 @@ export class Phones {
     return {
       now: this.secs(), from, settings: p.settings,
       trains: list.map(({ origin, date, arrSched, notStarted, ...t }) => t),
-      content: liveContent({ from: p.settings[from], to: p.settings[other(from)], trains: list, now: this.now() }),
+      content: await this.content(p, from),
       channel: await this.channel(p, from),
       live: p.live && { kind: p.live.kind, from: p.live.from, until: this.secs(p.live.until) },
       next: nextStart(p.settings, this.now()),
@@ -238,6 +256,18 @@ export class Phones {
     }
     await this.updateLive(p, true);
     this.save();
+  }
+
+  // The Live Activity's "Yes" (walking to train n) or "Undo" (n empty), from the app's WalkingTo intent. Answers with
+  // the new content-state, which the app puts on the lock screen at once, whatever Apple's push does.
+  async walkingTo(p, n) {
+    const t = n ? (await this.trains(p, p.live.from)).find(x => x.n === n) : null;
+    if (t) p.live.walking = { n: t.n, dep: t.dep, at: this.now() };
+    else if (!n) delete p.live.walking;
+    this.log(this.label(p), t ? `walking to the ${hm(t.dep)}` : n ? `walking to ${n}, which has gone` : 'not walking after all');
+    const c = await this.updateLive(p, true);
+    this.save();
+    return c;
   }
 
   async stopLive(p) {

@@ -55,6 +55,8 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         TRENI_SERVER: "https://treni.jordancox.org"
         TRENI_SECRET: ""
+        # Code in Shared/ that only the app runs (WalkingTo's call to the server) sits in #if TRENI_APP.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TRENI_APP"
   TreniLive:
     type: app-extension
     platform: iOS

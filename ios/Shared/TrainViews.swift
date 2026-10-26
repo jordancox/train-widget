@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 // The Live Activity's views: the lock screen, the Dynamic Island's pieces and the Watch. They live here, outside the
@@ -136,6 +137,24 @@ struct ExtraLine: View {
     }
 }
 
+/// The server's button after the bottom line: "Yes" to "Walking to the 08:37?", or "Undo" (`WalkingTo`).
+struct WalkButton: View {
+    let state: TrainAttributes.ContentState
+    var body: some View {
+        if let text = state.show?.button, let train = state.show?.buttonTrain {
+            Button(intent: WalkingTo(train: train)) {
+                Text(text)
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Board.accent.opacity(0.22), in: Capsule())
+                    .foregroundStyle(Board.accent)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
 /// "Then 17:57", or the server's line instead.
 struct BottomLine: View {
     let state: TrainAttributes.ContentState
@@ -187,13 +206,14 @@ struct LockScreenView: View {
             if let note = state.note, !state.trains.isEmpty {
                 Text(note).font(.caption).foregroundStyle(.orange)
             }
-            if state.trains.count > 1 || state.show?.line != nil || stale {
+            if state.trains.count > 1 || state.show?.line != nil || state.show?.button != nil || stale {
                 HStack {
                     BottomLine(state: state)
                     Spacer(minLength: 4)
                     if stale {
                         Text("Not updated since \(Fmt.hm(state.updated))").font(.caption2).foregroundStyle(.orange)
                     }
+                    WalkButton(state: state)
                 }
             }
         }
@@ -300,6 +320,7 @@ struct IslandExpandedBottom: View {
                     }
                     Spacer(minLength: 4)
                     BottomLine(state: state)
+                    WalkButton(state: state)
                 }
             }
             if stale {
@@ -317,9 +338,24 @@ struct WatchView: View {
     var stale = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Image(systemName: "tram.fill").foregroundStyle(Board.accent)
-                Text(state.title).font(.caption2.weight(.semibold)).lineLimit(1)
+            // The Smart Stack has little room: the button ("I'm walking to the 08:37") takes the title's place.
+            if let text = state.show?.buttonWatch, let train = state.show?.buttonTrain {
+                Button(intent: WalkingTo(train: train)) {
+                    Text(text)
+                        .font(.caption2.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                        .background(Board.accent.opacity(0.22), in: Capsule())
+                        .foregroundStyle(Board.accent)
+                }
+                .buttonStyle(.plain)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "tram.fill").foregroundStyle(Board.accent)
+                    Text(state.title).font(.caption2.weight(.semibold)).lineLimit(1)
+                }
             }
             if let t = state.main {
                 if let big = state.big {

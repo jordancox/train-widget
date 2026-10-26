@@ -144,4 +144,6 @@ extension Snapshot {
 }
 
 struct LiveRequest: Encodable { var from: String }
+struct WalkingRequest: Encodable { var train: String }
+struct WalkingAnswer: Decodable { var from: String; var content: TrainAttributes.ContentState }
 struct RegisterRequest: Encodable { var token: String; var device: String; var frequent: Bool }

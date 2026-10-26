@@ -55,6 +55,12 @@ struct Show: Codable, Hashable {
     var line: String? = nil
     var lineUntil: Double? = nil
     var lineTone: String? = nil
+    /// A button after the bottom line, "Yes" (to "Walking to the 08:37?") or "Undo", and the Watch's ("I'm walking
+    /// to the 08:37"). Tapping either sends `buttonTrain` to the server (`WalkingTo`): a train's number, or "" for
+    /// not walking after all. 26 Oct 2026 on.
+    var button: String? = nil
+    var buttonWatch: String? = nil
+    var buttonTrain: String? = nil
 }
 
 struct Train: Codable, Hashable, Identifiable {

@@ -173,14 +173,18 @@ function world() {
     dry: false,
     createChannel: async () => `ch${++n}`,
     start: async (token, aps) => { sent.push({ kind: 'start', token, aps }); return { status: 200 }; },
-    broadcast: async (channel, aps, prio) => { sent.push({ kind: aps.event, channel, aps, prio }); return { status: 200 }; },
+    // `refuse`: answer every broadcast with this status instead (429: too many).
+    broadcast: async (channel, aps, prio) => {
+      sent.push({ kind: aps.event, channel, aps, prio });
+      return apns.refuse ? { status: apns.refuse, body: { reason: 'TooManyRequests' } } : { status: 200 };
+    },
   };
   const journeys = async (a, b) => [{ n: `${a}-${b}`, dep: clock.t / 1000 + 20 * 60, exp: clock.t / 1000 + 20 * 60, delay: 0, dest: 'X', cancelled: false, plat: '5' }];
   const old = { tokens: { aaaa1111aaaa1111aaaa1111aaaa1111: { device: 'iPhone', frequent: true, at: 1 } }, channels: { home: 'jordan-home', work: 'jordan-work' }, started: {}, live: null };
   const data = migrate(old, structuredClone(settings), clock.t);
   const phones = new Phones({ data, defaults: settings, apns, journeys, log: () => {}, now: () => clock.t });
   const later = async minutes => { clock.t += minutes * 60e3; await phones.tick(); };
-  return { clock, sent, data, phones, later };
+  return { clock, sent, data, phones, later, apns };
 }
 const BOB = 'b0b0b0b0-0000-4000-8000-000000000000', TOKEN_B = 'bbbb2222bbbb2222bbbb2222bbbb2222';
 
@@ -308,6 +312,83 @@ test('show: every word on the lock screen, and what the countdowns count to, fro
   assert.deepEqual(c(1000, []), { title: 'To Tuscolana' });
   const content = s => liveContent({ from: { name: 'Muratella', walk: 8 }, to: { name: 'Roma Tuscolana' }, trains: [a, b], now: s * 1000 });
   assert.equal(change(content(1000 + 10 * 60 - 1), content(1000 + 10 * 60 + 1)), 'high'); // the walking-to line goes at once
+});
+
+test('walking: "Yes" on the Live Activity counts to that train from then on; "Undo" goes back', () => {
+  const a = { n: '1', dep: 1000, exp: 1000 + 10 * 60, delay: 0, dest: 'X', cancelled: false, plat: '5' };
+  const b = { ...a, n: '2', dep: a.dep + 15 * 60, exp: a.exp + 15 * 60 };
+  const c = { ...a, n: '3', dep: a.dep + 30 * 60, exp: a.exp + 30 * 60 };
+  const late = { ...a, n: '0', dep: a.dep - 10 * 60, exp: a.exp - 60, delay: 9 }; // an earlier one running late
+  const content = (s, walking, trains = [late, a, b, c]) =>
+    liveContent({ from: { name: 'Roma Tuscolana', walk: 13 }, to: { name: 'Muratella' }, trains, now: s * 1000, walking });
+  // 6 minutes before the first leaves: too late to set off for it, so on the way to it, or at home for the next.
+  const asks = content(a.exp - 6 * 60, undefined, [a, b, c]);
+  assert.equal(asks.show.label, 'Start walking in');
+  assert.equal(asks.show.until, b.exp - 13 * 60);
+  assert.match(asks.show.line, /^Walking to the \d\d:\d\d\? Leaves in$/);
+  assert.deepEqual([asks.show.button, asks.show.buttonTrain], ['Yes', '1']);
+  assert.equal(asks.show.buttonWatch, `I'm walking to the ${hm(a.dep)}`);
+  // Yes: the countdown is to that train, not to setting off; nothing earlier, even running late, and no button but Undo.
+  const going = content(a.exp - 6 * 60, { n: '1', dep: a.dep });
+  assert.deepEqual(going.trains.map(t => t.n), ['1', '2', '3']);
+  assert.equal(going.walk, undefined);
+  assert.deepEqual([going.show.label, going.show.until, going.show.time], ['Train leaves in', a.exp, hm(a.dep)]);
+  assert.equal(going.show.line, undefined);
+  assert.deepEqual([going.show.button, going.show.buttonTrain, going.show.buttonWatch], ['Undo', '', undefined]);
+  assert.equal(change(asks, going), 'high');
+  // Once it has gone (caught, or missed and at the station): the next train itself, still not the walk.
+  const after = content(a.exp + 60, { n: '1', dep: a.dep }, [b, c]);
+  assert.deepEqual([after.trains[0].n, after.show.label, after.show.until], ['2', 'Train leaves in', b.exp]);
+  // A cancelled one you'd set off for still says so.
+  assert.equal(content(a.exp - 6 * 60, { n: '1', dep: a.dep }, [{ ...a, cancelled: true }, b]).show.big, 'Cancelled');
+});
+
+test('phones: the walking button on the lock screen, through the server', async () => {
+  const { phones, sent, data, clock } = world();
+  const s = clock.t / 1000;
+  phones.journeys = async () => [
+    { n: '20423', dep: s + 6 * 60, exp: s + 6 * 60, delay: 0, dest: 'X', cancelled: false, plat: '5' },
+    { n: '20443', dep: s + 21 * 60, exp: s + 21 * 60, delay: 0, dest: 'X', cancelled: false, plat: '5' },
+  ];
+  await phones.tick(); // Jordan's morning: walking for the 20443, or on the way to the 20423?
+  const j = data.phones[LEGACY];
+  assert.equal(sent.at(-1).aps['content-state'].show.buttonTrain, '20423');
+  const c = await phones.walkingTo(j, '20423');
+  assert.equal(c.show.until, s + 6 * 60);
+  assert.equal(j.live.walking.n, '20423');
+  assert.deepEqual([sent.at(-1).kind, sent.at(-1).prio, sent.at(-1).aps['content-state'].show.until], ['update', 10, s + 6 * 60]);
+  assert.equal((await phones.walkingTo(j, 'gone')).show.until, s + 6 * 60); // a train that has left changes nothing
+  const back = await phones.walkingTo(j, '');
+  assert.equal(j.live.walking, undefined);
+  assert.equal(back.show.until, s + 21 * 60 - 13 * 60);
+  await phones.walkingTo(j, '20423');
+  await phones.stopLive(j);
+  await phones.startLive(j, 'home');
+  assert.equal(j.live.walking, undefined); // a new Live Activity starts afresh
+});
+
+test('phones: refused for too many updates, it waits longer each time instead of asking every 15 seconds', async () => {
+  const { phones, sent, data, clock, apns } = world();
+  await phones.tick();
+  const j = data.phones[LEGACY];
+  let n = 0;
+  phones.journeys = async () => [{ n: 'x', dep: clock.t / 1000 + 30 * 60, exp: clock.t / 1000 + 30 * 60 + 120 * ++n, delay: 0, dest: 'X', cancelled: false }];
+  apns.refuse = 429;
+  const tries = () => sent.filter(x => x.kind === 'update').length;
+  const before = tries();
+  for (let i = 0; i < 4 * 20; i++) { clock.t += 15e3; phones.cache.clear(); await phones.tick(); } // 20 minutes
+  assert.ok(tries() - before <= 6, `${tries() - before} tries in 20 minutes`); // at 0, 1, 3, 7, 15 minutes
+  assert.ok(sent.filter(x => x.kind === 'update').slice(-3).every(x => x.prio === 5));
+  apns.refuse = 0;
+  clock.t += 8 * 60e3;
+  phones.cache.clear();
+  await phones.tick();
+  assert.equal(j.live.throttled, undefined);
+  assert.equal(sent.at(-1).prio, 5); // through, but calm for a quarter of an hour
+  clock.t += 16 * 60e3;
+  phones.cache.clear();
+  await phones.tick();
+  assert.equal(sent.at(-1).prio, 10);
 });
 
 test('phones: the snapshot is the asking phone\'s own', async () => {
