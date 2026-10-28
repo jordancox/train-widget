@@ -177,24 +177,31 @@ struct TrainRow: View {
     let now: Double
     /// The countdown's room grows with the text size (a fixed 80 points would cut "36:41" off at large sizes).
     @ScaledMetric(relativeTo: .title3) private var countdownWidth = 80.0
+    @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        // At the largest text sizes side by side broke "08:09" in two and squeezed the badge into a blob
+        // (app-bigtext-trains.png, 28 Oct 2026): there the row stacks, countdown last.
+        let stacked = textSize.isAccessibilitySize
+        let row = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        let top = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+        row {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                top {
                     Text(Fmt.hm(train.dep)).font(.title3.weight(.bold)).monospacedDigit().strikethrough(train.cancelled)
+                        .lineLimit(1).fixedSize()
                     DelayBadge(train: train)
                 }
                 Text(train.detailLine(to: to)).font(.subheadline).foregroundStyle(.secondary)
                 Text("\(train.dest) · \(train.n)").font(.caption).foregroundStyle(.tertiary)
             }
-            Spacer()
+            if !stacked { Spacer() }
             // Not past the hour: "65:41" read as a clock, not a countdown. The time on the left says enough.
             if !train.cancelled, train.exp - now < 3600 {
                 Countdown(until: train.exp, updated: now)
                     .font(.title3.weight(.semibold))
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: countdownWidth, alignment: .trailing)
+                    .multilineTextAlignment(stacked ? .leading : .trailing)
+                    .frame(maxWidth: countdownWidth, alignment: stacked ? .leading : .trailing)
             }
         }
         .padding(.vertical, 2)
