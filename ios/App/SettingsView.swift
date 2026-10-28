@@ -57,7 +57,7 @@ struct SettingsView: View {
                                 Label { Text(Self.pretty(day)) } icon: { Image(systemName: "moon.zzz").foregroundStyle(.orange) }
                                 Spacer()
                                 Button { settings.skip?.removeAll { $0 == day } } label: {
-                                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+                                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.gray) // grey: blue read as "chosen"
                                 }
                                 .buttonStyle(.borderless)
                                 .accessibilityLabel("Not a day off")
