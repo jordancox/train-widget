@@ -40,6 +40,7 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
                         .disabled(model.snap == nil)
+                        .accessibilityLabel("Settings")
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -175,7 +176,8 @@ struct TrainRow: View {
                 Text("\(train.dest) · \(train.n)").font(.caption).foregroundStyle(.tertiary)
             }
             Spacer()
-            if !train.cancelled {
+            // Not past the hour: "65:41" read as a clock, not a countdown. The time on the left says enough.
+            if !train.cancelled, train.exp - now < 3600 {
                 Countdown(until: train.exp, updated: now)
                     .font(.title3.weight(.semibold))
                     .multilineTextAlignment(.trailing)
@@ -183,5 +185,6 @@ struct TrainRow: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine) // VoiceOver reads each train as one line
     }
 }

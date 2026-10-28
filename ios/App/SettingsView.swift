@@ -8,8 +8,15 @@ struct SettingsView: View {
     @State private var saving = false
     @State private var error: String?
     @State private var addingDayOff = false
+    /// As it came from the server: Save waits for a change, and a swipe down can't throw one away.
+    private let saved: TreniSettings
 
-    init(settings: TreniSettings) { _settings = State(initialValue: settings) }
+    init(settings: TreniSettings) {
+        saved = settings
+        _settings = State(initialValue: settings)
+    }
+
+    private var changed: Bool { settings != saved }
 
     var body: some View {
         NavigationStack {
@@ -54,7 +61,7 @@ struct SettingsView: View {
                     Section {
                         ForEach(settings.skip ?? [], id: \.self) { day in
                             HStack {
-                                Label { Text(Self.pretty(day)) } icon: { Image(systemName: "moon.zzz").foregroundStyle(.orange) }
+                                Label { Text(Self.listed(day)) } icon: { Image(systemName: "moon.zzz").foregroundStyle(.orange) }
                                 Spacer()
                                 Button { settings.skip?.removeAll { $0 == day } } label: {
                                     Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.gray) // grey: blue read as "chosen"
@@ -93,17 +100,23 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        Task {
-                            saving = true
-                            defer { saving = false }
-                            do { try await model.save(settings); dismiss() } catch { self.error = error.localizedDescription }
+                    if saving {
+                        ProgressView()
+                    } else {
+                        Button("Save") {
+                            Task {
+                                saving = true
+                                defer { saving = false }
+                                do { try await model.save(settings); dismiss() } catch { self.error = error.localizedDescription }
+                            }
                         }
+                        .disabled(!valid || !changed)
                     }
-                    .disabled(saving || !valid)
                 }
             }
         }
+        // A day off added and then the sheet swiped away was lost without a word: with changes, only Cancel discards.
+        .interactiveDismissDisabled(changed)
     }
 
     /// The first day the calendar offers: the next one it would start by itself on that isn't off already.
@@ -146,6 +159,15 @@ struct SettingsView: View {
         let p = iso.split(separator: "-").compactMap { Int($0) }
         guard p.count == 3, let date = Calendar.current.date(from: DateComponents(year: p[0], month: p[1], day: p[2])) else { return iso }
         return date.formatted(.dateTime.weekday(.wide).day().month(.wide))
+    }
+
+    /// In the days off list: "Tomorrow (Thursday 29 October)"
+    static func listed(_ iso: String) -> String {
+        let p = iso.split(separator: "-").compactMap { Int($0) }
+        guard p.count == 3, let date = Calendar.current.date(from: DateComponents(year: p[0], month: p[1], day: p[2])) else { return iso }
+        if Calendar.current.isDateInToday(date) { return "Today (\(pretty(iso)))" }
+        if Calendar.current.isDateInTomorrow(date) { return "Tomorrow (\(pretty(iso)))" }
+        return pretty(iso)
     }
 }
 

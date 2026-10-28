@@ -36,6 +36,11 @@ launch settings -demo -screen settings; sleep 5; shot settings
 # and picking one is its own calendar.
 launch daysoff -demo -dayoff -screen daysoff; sleep 6; shot settings-daysoff
 launch addday -demo -dayoff -screen addday; sleep 7; shot settings-addday
+# Big text (Settings → Accessibility → Larger Text), as some colleagues will have it: nothing should be cut off.
+xcrun simctl ui "$UDID" content_size accessibility-large || true
+launch bigtext -demo; sleep 6; shot app-bigtext
+launch bigtext-settings -demo -screen daysoff -dayoff; sleep 6; shot settings-bigtext
+xcrun simctl ui "$UDID" content_size large || true
 xcrun simctl ui "$UDID" appearance dark
 launch settings-dark -demo -screen settings; sleep 5; shot settings-dark
 launch live -demo -live; sleep 6; shot app-live

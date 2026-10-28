@@ -38,7 +38,7 @@ enum Demo {
         let settings = TreniSettings(home: home, work: work, windows: [
             TripWindow(id: "morning", from: "home", start: "07:30", end: "09:00", days: [1, 2, 3, 4, 5], on: true),
             TripWindow(id: "evening", from: "work", start: "16:45", end: "18:45", days: [1, 2, 3, 4, 5], on: true),
-        ], skip: dayoff ? ["2026-10-19"] : [])
+        ], skip: dayoff ? ["2026-10-19", SettingsView.iso(Date().addingTimeInterval(86400))] : []) // and tomorrow, for Settings
         return Snapshot(now: now, from: from, settings: settings, trains: list,
                         content: content(from: from, trains: list), channel: "demo",
                         live: live ? .init(kind: "manual", from: from, until: now + 55 * 60) : nil,
