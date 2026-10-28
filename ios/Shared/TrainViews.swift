@@ -174,9 +174,10 @@ struct LockScreenView: View {
             HStack(spacing: 6) {
                 Image(systemName: "tram.fill").foregroundStyle(Board.accent)
                 Text(state.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    .layoutPriority(1) // where you're going before the platform, when large text leaves room for one
                 Spacer(minLength: 4)
                 if let corner = state.corner {
-                    Text(corner).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(corner).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             if let t = state.main {

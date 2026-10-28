@@ -8,44 +8,51 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            // Top to bottom: which way, the lock screen as it looks, its switches, then the trains. The preview was
-            // at the bottom until 28 Oct 2026 (Jordan: "should just be at the top of the app screen itself").
-            List {
-                if let error = model.error {
-                    Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
-                }
-                if let snap = model.snap {
-                    if let welcome = snap.welcome ?? (snap.setup == true ? Snapshot.welcome : nil) {
-                        Section {
-                            Button { showSettings = true } label: { Label(welcome, systemImage: "hand.wave.fill") }
+            ScrollViewReader { proxy in
+                // Top to bottom: which way, the lock screen as it looks, its switches, then the trains. The preview was
+                // at the bottom until 28 Oct 2026 (Jordan: "should just be at the top of the app screen itself").
+                List {
+                    if let error = model.error {
+                        Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
+                    }
+                    if let snap = model.snap {
+                        if let welcome = snap.welcome ?? (snap.setup == true ? Snapshot.welcome : nil) {
+                            Section {
+                                Button { showSettings = true } label: { Label(welcome, systemImage: "hand.wave.fill") }
+                            }
                         }
+                        directionSection(snap)
+                        Section("What the lock screen shows") {
+                            LockScreenView(state: snap.content)
+                                .background(Board.background, in: RoundedRectangle(cornerRadius: 22))
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                        }
+                        liveSection(snap)
+                        trainsSection(snap)
+                    } else if model.loading || model.error == nil {
+                        Section { HStack { Spacer(); ProgressView(); Spacer() } }
                     }
-                    directionSection(snap)
-                    Section("What the lock screen shows") {
-                        LockScreenView(state: snap.content)
-                            .background(Board.background, in: RoundedRectangle(cornerRadius: 22))
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
+                }
+                .listSectionSpacing(.compact)
+                .navigationTitle("Treni")
+                .refreshable { await model.refresh() }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                            .disabled(model.snap == nil)
+                            .accessibilityLabel("Settings")
                     }
-                    liveSection(snap)
-                    trainsSection(snap)
-                } else if model.loading || model.error == nil {
-                    Section { HStack { Spacer(); ProgressView(); Spacer() } }
                 }
-            }
-            .listSectionSpacing(.compact)
-            .navigationTitle("Treni")
-            .refreshable { await model.refresh() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                        .disabled(model.snap == nil)
-                        .accessibilityLabel("Settings")
+                .sheet(isPresented: $showSettings) {
+                    if let settings = model.snap?.settings {
+                        SettingsView(settings: settings).environmentObject(model)
+                    }
                 }
-            }
-            .sheet(isPresented: $showSettings) {
-                if let settings = model.snap?.settings {
-                    SettingsView(settings: settings).environmentObject(model)
+                // -screen trains: scrolled down to the trains, for the CI's big-text picture (ci/sim-shots.sh).
+                .onChange(of: model.snap != nil) {
+                    guard ProcessInfo.processInfo.arguments.contains("trains"), let first = model.snap?.trains.first else { return }
+                    Task { try? await Task.sleep(for: .milliseconds(500)); proxy.scrollTo(first.n, anchor: .top) }
                 }
             }
         }
@@ -84,7 +91,7 @@ struct ContentView: View {
             if snap.trains.isEmpty {
                 Text(snap.content.note ?? "No trains in the next hour").foregroundStyle(.secondary)
             }
-            ForEach(snap.trains) { TrainRow(train: $0, to: snap.content.to, now: snap.now) }
+            ForEach(snap.trains) { TrainRow(train: $0, to: snap.content.to, now: snap.now).id($0.n) }
         } header: {
             Text("Next trains")
         } footer: {
@@ -105,14 +112,14 @@ struct ContentView: View {
                 model.liveHere = on // now, or the switch flicks back until iOS catches up
                 Task { if on { await model.startLive() } else { await model.stopLive() } }
             })) {
-                SwitchLabel(title: "On the lock screen now", icon: "lock.iphone",
+                IconLabel(title: "On the lock screen now", icon: "lock.iphone",
                             detail: model.liveHere ? snap.live.map { "Until \(Fmt.hm($0.until))." } : nil)
             }
             if auto {
                 Toggle(isOn: Binding(get: { !skipped }, set: { on in
                     Task { if on { await model.unskip(snap.today) } else { await model.skipToday() } }
                 })) {
-                    SwitchLabel(title: "Start by itself today", icon: skipped ? "moon.zzz" : "calendar.badge.clock",
+                    IconLabel(title: "Start by itself today", icon: skipped ? "moon.zzz" : "calendar.badge.clock",
                                 detail: autoDetail, warn: skipped)
                 }
             }
@@ -143,20 +150,24 @@ struct ContentView: View {
     }
 }
 
-/// A switch's words: what it does, and under it how things stand.
-struct SwitchLabel: View {
+/// An icon and a row's words: for a switch, what it does and under it how things stand. Not a Label: at large text
+/// sizes a Label lets the words run on under the icon (the CI's app-bigtext.png, 28 Oct 2026).
+struct IconLabel: View {
     let title: String
     let icon: String
     var detail: String?
     var warn = false
+    @ScaledMetric private var iconWidth = 28.0
 
     var body: some View {
-        Label {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Image(systemName: icon).foregroundStyle(warn ? Color.orange : Color.accentColor).frame(width: iconWidth)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 if let detail { Text(detail).font(.footnote).foregroundStyle(warn ? Color.orange : Color.secondary) }
             }
-        } icon: { Image(systemName: icon).foregroundStyle(warn ? Color.orange : Color.accentColor) }
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        }
     }
 }
 
@@ -164,6 +175,8 @@ struct TrainRow: View {
     let train: Train
     let to: String
     let now: Double
+    /// The countdown's room grows with the text size (a fixed 80 points would cut "36:41" off at large sizes).
+    @ScaledMetric(relativeTo: .title3) private var countdownWidth = 80.0
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -181,7 +194,7 @@ struct TrainRow: View {
                 Countdown(until: train.exp, updated: now)
                     .font(.title3.weight(.semibold))
                     .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 80, alignment: .trailing)
+                    .frame(maxWidth: countdownWidth, alignment: .trailing)
             }
         }
         .padding(.vertical, 2)

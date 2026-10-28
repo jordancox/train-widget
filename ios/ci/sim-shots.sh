@@ -39,6 +39,7 @@ launch addday -demo -dayoff -screen addday; sleep 7; shot settings-addday
 # Big text (Settings → Accessibility → Larger Text), as some colleagues will have it: nothing should be cut off.
 xcrun simctl ui "$UDID" content_size accessibility-large || true
 launch bigtext -demo; sleep 6; shot app-bigtext
+launch bigtext-trains -demo -screen trains; sleep 6; shot app-bigtext-trains
 launch bigtext-settings -demo -screen daysoff -dayoff; sleep 6; shot settings-bigtext
 xcrun simctl ui "$UDID" content_size large || true
 xcrun simctl ui "$UDID" appearance dark

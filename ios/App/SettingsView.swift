@@ -61,7 +61,7 @@ struct SettingsView: View {
                     Section {
                         ForEach(settings.skip ?? [], id: \.self) { day in
                             HStack {
-                                Label { Text(Self.listed(day)) } icon: { Image(systemName: "moon.zzz").foregroundStyle(.orange) }
+                                IconLabel(title: Self.listed(day), icon: "moon.zzz", warn: true)
                                 Spacer()
                                 Button { settings.skip?.removeAll { $0 == day } } label: {
                                     Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.gray) // grey: blue read as "chosen"
@@ -194,6 +194,7 @@ struct DaysPicker: View {
         }
         .frame(maxWidth: .infinity)
         .opacity(enabled ? 1 : 0.4)
+        .dynamicTypeSize(...DynamicTypeSize.xLarge) // seven letters in fixed circles: bigger text spills out of them
     }
 }
 
