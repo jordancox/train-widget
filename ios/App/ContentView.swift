@@ -2,52 +2,49 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var model: Model
-    @State private var showSettings = ProcessInfo.processInfo.arguments.contains("settings")
+    // -screen settings, daysoff or addday: Settings open, for the CI's pictures (ci/sim-shots.sh).
+    @State private var showSettings = ["settings", "daysoff", "addday"].contains { ProcessInfo.processInfo.arguments.contains($0) }
     @Environment(\.scenePhase) private var phase
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                List {
-                    if let error = model.error {
-                        Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
-                    }
-                    if let snap = model.snap {
-                        if let welcome = snap.welcome ?? (snap.setup == true ? Snapshot.welcome : nil) {
-                            Section {
-                                Button { showSettings = true } label: { Label(welcome, systemImage: "hand.wave.fill") }
-                            }
+            // Top to bottom: which way, the lock screen as it looks, its switches, then the trains. The preview was
+            // at the bottom until 28 Oct 2026 (Jordan: "should just be at the top of the app screen itself").
+            List {
+                if let error = model.error {
+                    Section { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
+                }
+                if let snap = model.snap {
+                    if let welcome = snap.welcome ?? (snap.setup == true ? Snapshot.welcome : nil) {
+                        Section {
+                            Button { showSettings = true } label: { Label(welcome, systemImage: "hand.wave.fill") }
                         }
-                        trainsSection(snap)
-                        liveSection(snap)
-                        Section("What the lock screen shows") {
-                            LockScreenView(state: snap.content)
-                                .background(Board.background, in: RoundedRectangle(cornerRadius: 22))
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
-                                .id("preview")
-                        }
-                    } else if model.loading || model.error == nil {
-                        Section { HStack { Spacer(); ProgressView(); Spacer() } }
                     }
-                }
-                .navigationTitle("Treni")
-                .refreshable { await model.refresh() }
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { showSettings = true } label: { Image(systemName: "gearshape") }
-                            .disabled(model.snap == nil)
+                    directionSection(snap)
+                    Section("What the lock screen shows") {
+                        LockScreenView(state: snap.content)
+                            .background(Board.background, in: RoundedRectangle(cornerRadius: 22))
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                     }
+                    liveSection(snap)
+                    trainsSection(snap)
+                } else if model.loading || model.error == nil {
+                    Section { HStack { Spacer(); ProgressView(); Spacer() } }
                 }
-                .sheet(isPresented: $showSettings) {
-                    if let settings = model.snap?.settings {
-                        SettingsView(settings: settings).environmentObject(model)
-                    }
+            }
+            .listSectionSpacing(.compact)
+            .navigationTitle("Treni")
+            .refreshable { await model.refresh() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: { Image(systemName: "gearshape") }
+                        .disabled(model.snap == nil)
                 }
-                // -screen bottom: the switches and the preview in view, for the CI's pictures (ci/sim-shots.sh).
-                .onChange(of: model.snap != nil) {
-                    guard ProcessInfo.processInfo.arguments.contains("bottom") else { return }
-                    Task { try? await Task.sleep(for: .milliseconds(500)); proxy.scrollTo("preview", anchor: .bottom) }
+            }
+            .sheet(isPresented: $showSettings) {
+                if let settings = model.snap?.settings {
+                    SettingsView(settings: settings).environmentObject(model)
                 }
             }
         }
@@ -65,7 +62,8 @@ struct ContentView: View {
         }
     }
 
-    private func trainsSection(_ snap: Snapshot) -> some View {
+    /// To work or to home: it sets both the preview and the trains under it.
+    private func directionSection(_ snap: Snapshot) -> some View {
         Section {
             Picker("Direction", selection: Binding(get: { snap.from }, set: { new in
                 model.choice = new
@@ -77,11 +75,17 @@ struct ContentView: View {
             .pickerStyle(.segmented)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
+        }
+    }
 
+    private func trainsSection(_ snap: Snapshot) -> some View {
+        Section {
             if snap.trains.isEmpty {
                 Text(snap.content.note ?? "No trains in the next hour").foregroundStyle(.secondary)
             }
             ForEach(snap.trains) { TrainRow(train: $0, to: snap.content.to, now: snap.now) }
+        } header: {
+            Text("Next trains")
         } footer: {
             Text("Trains that stop at both stations, from Viaggiatreno. Updated \(Fmt.hm(snap.now)).")
         }

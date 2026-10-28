@@ -42,7 +42,11 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   the phone by itself. The app can start one by hand, stop it, or skip today: two switches since 20 Oct 2026 ("On
   the lock screen now", "Start by itself today"), each with a line under it saying where things stand. As buttons
   worded like statuses ("Day off today: don't start by itself"), a tester turned a day off without knowing and
-  wondered why nothing came up. The CI shoots both sides (`app-dayoff.png`, `app-live-bottom.png`).
+  wondered why nothing came up. The CI shoots both sides (`app-dayoff.png`, `app-live.png`). Since 28 Oct 2026 the
+  app's screen runs: direction, the lock screen preview, its two switches, then the trains (the preview had been at
+  the bottom). Days off in Settings list only days that are off, each with a remove button, and "Add a day off" opens
+  a calendar: a date picker always showing tomorrow under "Days off" read as if tomorrow were off already
+  (`settings-daysoff.png`, `settings-addday.png`).
 - **Several phones** (17 Oct 2026, for 5–6 colleagues through TestFlight): the app sends a random id it makes once
   (`X-Treni-Phone`, `API.phone`); a new phone starts from `defaults.json` with nothing starting by itself and a
   welcome line until it saves its own Settings. Build 13 and older send no id and get the `legacy` record (Jordan's,

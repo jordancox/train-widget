@@ -7,58 +7,85 @@ struct SettingsView: View {
     @State private var settings: TreniSettings
     @State private var saving = false
     @State private var error: String?
-    @State private var newDayOff = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    @State private var addingDayOff = false
 
     init(settings: TreniSettings) { _settings = State(initialValue: settings) }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    NavigationLink {
-                        StationSearch(title: "Home station") { settings.home = Station(code: $0.code, name: $0.name, walk: settings.home.walk) }
-                    } label: { LabeledContent("Home", value: settings.home.name) }
-                    Stepper(value: walk(\.home), in: 0...30) {
-                        LabeledContent("To its platform", value: "\(settings.home.walk ?? 0) min")
-                    }
-                    NavigationLink {
-                        StationSearch(title: "Work station") { settings.work = Station(code: $0.code, name: $0.name, walk: settings.work.walk) }
-                    } label: { LabeledContent("Work", value: settings.work.name) }
-                    Stepper(value: walk(\.work), in: 0...30) {
-                        LabeledContent("To its platform", value: "\(settings.work.walk ?? 0) min")
-                    }
-                } header: { Text("Stations") } footer: {
-                    Text("Only trains that stop at both are shown. \"To its platform\": from setting off to standing on the platform, with a margin. The lock screen counts down to when to leave, then to the train.")
-                }
-
-                ForEach($settings.windows) { $w in
+            ScrollViewReader { proxy in
+                Form {
                     Section {
-                        Toggle("Start by itself", isOn: $w.on)
-                        Group {
-                            DatePicker("From", selection: time($w.start), displayedComponents: .hourAndMinute)
-                            DatePicker("Until", selection: time($w.end), displayedComponents: .hourAndMinute)
+                        NavigationLink {
+                            StationSearch(title: "Home station") { settings.home = Station(code: $0.code, name: $0.name, walk: settings.home.walk) }
+                        } label: { LabeledContent("Home", value: settings.home.name) }
+                        Stepper(value: walk(\.home), in: 0...30) {
+                            LabeledContent("Walk to the platform", value: "\(settings.home.walk ?? 0) min")
                         }
-                        .environment(\.locale, Locale(identifier: "en_GB")) // 24-hour, like the trains
-                        DaysPicker(days: $w.days)
-                    } header: {
-                        Text("To \(Fmt.short(w.from == "home" ? settings.work.name : settings.home.name))")
+                        NavigationLink {
+                            StationSearch(title: "Work station") { settings.work = Station(code: $0.code, name: $0.name, walk: settings.work.walk) }
+                        } label: { LabeledContent("Work", value: settings.work.name) }
+                        Stepper(value: walk(\.work), in: 0...30) {
+                            LabeledContent("Walk to the platform", value: "\(settings.work.walk ?? 0) min")
+                        }
+                    } header: { Text("Stations") } footer: {
+                        Text("Only trains that stop at both are shown. The walk is from setting off to standing on the platform, with a margin: the lock screen counts down to when to start walking, then to the train.")
+                    }
+
+                    ForEach($settings.windows) { $w in
+                        Section {
+                            Toggle("Start by itself", isOn: $w.on)
+                            Group {
+                                Group {
+                                    DatePicker("From", selection: time($w.start), displayedComponents: .hourAndMinute)
+                                    DatePicker("Until", selection: time($w.end), displayedComponents: .hourAndMinute)
+                                }
+                                .environment(\.locale, Locale(identifier: "en_GB")) // 24-hour, like the trains
+                                DaysPicker(days: $w.days)
+                            }
+                            .disabled(!w.on) // kept for when it's switched back on, but greyed so it doesn't look in use
+                        } header: {
+                            Text("To \(Fmt.short(w.from == "home" ? settings.work.name : settings.home.name))")
+                        }
+                    }
+
+                    // Only days that are off show a date. Until 28 Oct 2026 a date picker sat here ready for the next one,
+                    // already showing tomorrow, and read as if tomorrow were a day off (Jordan). Picking is its own sheet.
+                    Section {
+                        ForEach(settings.skip ?? [], id: \.self) { day in
+                            HStack {
+                                Label { Text(Self.pretty(day)) } icon: { Image(systemName: "moon.zzz").foregroundStyle(.orange) }
+                                Spacer()
+                                Button { settings.skip?.removeAll { $0 == day } } label: {
+                                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Not a day off")
+                            }
+                        }
+                        .onDelete { settings.skip?.remove(atOffsets: $0) }
+                        Button { addingDayOff = true } label: { Label("Add a day off", systemImage: "plus.circle.fill") }
+                            .id("daysoff")
+                    } header: { Text("Days off") } footer: {
+                        Text("Holidays and days at home: it won't start by itself on these.")
+                    }
+
+                    if let error {
+                        Section { Text(error).foregroundStyle(.red) }
                     }
                 }
-
-                Section {
-                    ForEach(settings.skip ?? [], id: \.self) { day in Text(Self.pretty(day)) }
-                        .onDelete { settings.skip?.remove(atOffsets: $0) }
-                    DatePicker("Day", selection: $newDayOff, in: Date()..., displayedComponents: .date)
-                    Button("Add day off") {
-                        let day = Self.iso(newDayOff)
+                .sheet(isPresented: $addingDayOff) {
+                    AddDayOff(taken: settings.skip ?? [], first: firstWorkingDay) { day in
                         settings.skip = Array(Set((settings.skip ?? []) + [day])).sorted()
                     }
-                } header: { Text("Days off") } footer: {
-                    Text("Holidays and days at home: it won't start by itself on these.")
                 }
-
-                if let error {
-                    Section { Text(error).foregroundStyle(.red) }
+                // -screen daysoff / addday: scrolled to the days off, or picking one, for the CI's pictures.
+                .task {
+                    let args = ProcessInfo.processInfo.arguments
+                    guard args.contains("daysoff") || args.contains("addday") else { return }
+                    try? await Task.sleep(for: .milliseconds(600))
+                    proxy.scrollTo("daysoff", anchor: .bottom)
+                    if args.contains("addday") { try? await Task.sleep(for: .milliseconds(400)); addingDayOff = true }
                 }
             }
             .navigationTitle("Settings")
@@ -77,6 +104,18 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    /// The first day the calendar offers: the next one it would start by itself on that isn't off already.
+    private var firstWorkingDay: Date {
+        let calendar = Calendar.current
+        let days = Set(settings.windows.filter(\.on).flatMap(\.days))
+        for ahead in 1...21 {
+            guard let date = calendar.date(byAdding: .day, value: ahead, to: Date()) else { break }
+            let dow = (calendar.component(.weekday, from: date) + 5) % 7 + 1 // Monday = 1
+            if days.isEmpty || days.contains(dow), !(settings.skip ?? []).contains(Self.iso(date)) { return date }
+        }
+        return calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
     }
 
     private var valid: Bool {
@@ -112,6 +151,7 @@ struct SettingsView: View {
 
 struct DaysPicker: View {
     @Binding var days: [Int]
+    @Environment(\.isEnabled) private var enabled
     private let labels = ["M", "T", "W", "T", "F", "S", "S"]
 
     var body: some View {
@@ -131,6 +171,45 @@ struct DaysPicker: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .opacity(enabled ? 1 : 0.4)
+    }
+}
+
+/// A calendar to pick one day off, with what it means under it. "Add" adds it to the list; Settings' Save keeps it.
+struct AddDayOff: View {
+    let taken: [String]
+    let add: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var day: Date
+
+    init(taken: [String], first: Date, add: @escaping (String) -> Void) {
+        self.taken = taken
+        self.add = add
+        _day = State(initialValue: first)
+    }
+
+    var body: some View {
+        let iso = SettingsView.iso(day)
+        let already = taken.contains(iso)
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Day", selection: $day, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: .date)
+                        .datePickerStyle(.graphical)
+                } footer: {
+                    Text(already ? "\(SettingsView.pretty(iso)) is a day off already."
+                                 : "It won't start by itself on \(SettingsView.pretty(iso)).")
+                }
+            }
+            .navigationTitle("Add a day off")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") { add(iso); dismiss() }.disabled(already)
+                }
+            }
+        }
     }
 }
 

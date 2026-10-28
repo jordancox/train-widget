@@ -28,10 +28,14 @@ launch() { xcrun simctl launch --terminate-running-process --stdout="$OUT/$1.log
 launch app -demo -shots; sleep 7; shot app
 DATA=$(xcrun simctl get_app_container "$UDID" "$ID" data)
 cp "$DATA"/Documents/shots/*.png "$OUT/" 2>/dev/null && ls "$DATA/Documents/shots" || echo "no -shots pictures"
-# Today switched off, scrolled to the switches. On 20 Oct 2026 a tester turned today off with a button that read like a
-# status, and couldn't tell: this is the picture to check that the off side says so.
-launch dayoff -demo -dayoff -screen bottom; sleep 6; shot app-dayoff
+# Today switched off. On 20 Oct 2026 a tester turned today off with a button that read like a status, and couldn't
+# tell: this is the picture to check that the off side says so. The switches sit under the preview at the top.
+launch dayoff -demo -dayoff; sleep 6; shot app-dayoff
 launch settings -demo -screen settings; sleep 5; shot settings
+# Days off in Settings: only days that are off show a date (until 28 Oct 2026 a ready date picker read as a day off),
+# and picking one is its own calendar.
+launch daysoff -demo -dayoff -screen daysoff; sleep 6; shot settings-daysoff
+launch addday -demo -dayoff -screen addday; sleep 7; shot settings-addday
 xcrun simctl ui "$UDID" appearance dark
 launch settings-dark -demo -screen settings; sleep 5; shot settings-dark
 launch live -demo -live; sleep 6; shot app-live
@@ -39,8 +43,6 @@ launch live -demo -live; sleep 6; shot app-live
 xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null; sleep 4; shot island
 # The island is sometimes slow to show up (16 Oct 2026): a second try.
 sleep 6; shot island-2
-# Back in the app, scrolled to the switches: the lock screen one on, with how long it stays.
-launch live-bottom -demo -live -screen bottom; sleep 6; shot app-live-bottom
 xcrun simctl terminate "$UDID" "$ID" || true
 
 # A reinstall is still the same phone: its id comes back from the Keychain. On 20 Oct 2026 a reinstall made Jordan a
