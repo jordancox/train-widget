@@ -46,7 +46,9 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
   app's screen runs: direction, the lock screen preview, its two switches, then the trains (the preview had been at
   the bottom). Days off in Settings list only days that are off, each with a remove button, and "Add a day off" opens
   a calendar: a date picker always showing tomorrow under "Days off" read as if tomorrow were off already
-  (`settings-daysoff.png`, `settings-addday.png`).
+  (`settings-daysoff.png`, `settings-addday.png`). The CI also shoots the app and Settings at a large text size
+  (`app-bigtext.png`, `app-bigtext-trains.png`, `settings-bigtext.png`): there the train rows stack, and the
+  switch and day-off rows use `IconLabel`, because a Label runs its words on under the icon.
 - **Several phones** (17 Oct 2026, for 5–6 colleagues through TestFlight): the app sends a random id it makes once
   (`X-Treni-Phone`, `API.phone`); a new phone starts from `defaults.json` with nothing starting by itself and a
   welcome line until it saves its own Settings. Build 13 and older send no id and get the `legacy` record (Jordan's,
