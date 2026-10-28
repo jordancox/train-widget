@@ -182,8 +182,8 @@ struct TrainRow: View {
 
     var body: some View {
         // At the largest text sizes side by side broke "08:09" in two and squeezed the badge into a blob
-        // (app-bigtext-trains.png, 28 Oct 2026): there the row stacks, countdown last. Plain stacks, not AnyLayout:
-        // with AnyLayout the first row's details wrapped at the normal size.
+        // (app-bigtext-trains.png, 28 Oct 2026): there the row stacks, countdown last. No fixedSize on the time or
+        // the badge: with it the first row's details wrapped at the normal size.
         Group {
             if textSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 6) {
@@ -216,7 +216,6 @@ struct TrainRow: View {
 
     private var time: some View {
         Text(Fmt.hm(train.dep)).font(.title3.weight(.bold)).monospacedDigit().strikethrough(train.cancelled)
-            .lineLimit(1).fixedSize()
     }
 
     // Not past the hour: "65:41" read as a clock, not a countdown. The time on the left says enough.

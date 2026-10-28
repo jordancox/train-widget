@@ -99,8 +99,6 @@ struct DelayBadge: View {
     var body: some View {
         Text(train.statusText)
             .font(.caption.weight(.bold))
-            .lineLimit(1)
-            .fixedSize()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(train.statusColor.opacity(0.22), in: Capsule())
