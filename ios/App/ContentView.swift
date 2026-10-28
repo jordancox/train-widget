@@ -161,7 +161,8 @@ struct IconLabel: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Image(systemName: icon).foregroundStyle(warn ? Color.orange : Color.accentColor).frame(width: iconWidth)
+            Image(systemName: icon).imageScale(.large).foregroundStyle(warn ? Color.orange : Color.accentColor)
+                .frame(width: iconWidth)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 if let detail { Text(detail).font(.footnote).foregroundStyle(warn ? Color.orange : Color.secondary) }
@@ -181,30 +182,50 @@ struct TrainRow: View {
 
     var body: some View {
         // At the largest text sizes side by side broke "08:09" in two and squeezed the badge into a blob
-        // (app-bigtext-trains.png, 28 Oct 2026): there the row stacks, countdown last.
-        let stacked = textSize.isAccessibilitySize
-        let row = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
-        let top = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
-        row {
-            VStack(alignment: .leading, spacing: 3) {
-                top {
-                    Text(Fmt.hm(train.dep)).font(.title3.weight(.bold)).monospacedDigit().strikethrough(train.cancelled)
-                        .lineLimit(1).fixedSize()
-                    DelayBadge(train: train)
+        // (app-bigtext-trains.png, 28 Oct 2026): there the row stacks, countdown last. Plain stacks, not AnyLayout:
+        // with AnyLayout the first row's details wrapped at the normal size.
+        Group {
+            if textSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    details(stacked: true)
+                    countdown(stacked: true)
                 }
-                Text(train.detailLine(to: to)).font(.subheadline).foregroundStyle(.secondary)
-                Text("\(train.dest) · \(train.n)").font(.caption).foregroundStyle(.tertiary)
-            }
-            if !stacked { Spacer() }
-            // Not past the hour: "65:41" read as a clock, not a countdown. The time on the left says enough.
-            if !train.cancelled, train.exp - now < 3600 {
-                Countdown(until: train.exp, updated: now)
-                    .font(.title3.weight(.semibold))
-                    .multilineTextAlignment(stacked ? .leading : .trailing)
-                    .frame(maxWidth: countdownWidth, alignment: stacked ? .leading : .trailing)
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    details(stacked: false)
+                    Spacer()
+                    countdown(stacked: false)
+                }
             }
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine) // VoiceOver reads each train as one line
+    }
+
+    private func details(stacked: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if stacked {
+                VStack(alignment: .leading, spacing: 4) { time; DelayBadge(train: train) }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 6) { time; DelayBadge(train: train) }
+            }
+            Text(train.detailLine(to: to)).font(.subheadline).foregroundStyle(.secondary)
+            Text("\(train.dest) · \(train.n)").font(.caption).foregroundStyle(.tertiary)
+        }
+    }
+
+    private var time: some View {
+        Text(Fmt.hm(train.dep)).font(.title3.weight(.bold)).monospacedDigit().strikethrough(train.cancelled)
+            .lineLimit(1).fixedSize()
+    }
+
+    // Not past the hour: "65:41" read as a clock, not a countdown. The time on the left says enough.
+    @ViewBuilder private func countdown(stacked: Bool) -> some View {
+        if !train.cancelled, train.exp - now < 3600 {
+            Countdown(until: train.exp, updated: now)
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(stacked ? .leading : .trailing)
+                .frame(maxWidth: countdownWidth, alignment: stacked ? .leading : .trailing)
+        }
     }
 }
