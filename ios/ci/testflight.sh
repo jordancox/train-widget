@@ -51,9 +51,23 @@ echo "sent to TestFlight: build $BUILD"
 if [ "${ACCEPT_MINUTES:-20}" -gt 0 ]; then
   set +e
   python3 ios/ci/asc.py accepted org.jordancox.treni "$BUILD" "${ACCEPT_MINUTES:-20}"
-  case $? in
+  ACCEPTED=$?
+  case $ACCEPTED in
     0) ;;
     1) exit 1 ;;
     *) echo "::warning::Apple hasn't finished checking build $BUILD: look in App Store Connect" ;;
   esac
+fi
+# Every build goes to the colleagues too (Jordan, 29 Oct 2026, after builds 26 and 35 went only to him): added to their
+# group and sent to Apple's beta review. A refusal fails the run; a review still going is a warning.
+TO_GROUP="python3 ios/ci/asc.py to-group org.jordancox.treni $BUILD Colleagues"
+if [ "${ACCEPTED:-2}" -eq 0 ]; then
+  $TO_GROUP 10
+  case $? in
+    0) ;;
+    1) exit 1 ;;
+    *) echo "::warning::build $BUILD isn't with the colleagues yet: look again from the VM with $TO_GROUP" ;;
+  esac
+else
+  echo "::warning::build $BUILD hasn't gone to the colleagues: once Apple accepts it, from the VM: $TO_GROUP"
 fi

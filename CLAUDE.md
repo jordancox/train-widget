@@ -108,8 +108,10 @@ and Live Activity on the server (`server/lib/phones.mjs`). Public repo (`jordanc
 - TestFlight for colleagues (17 Oct 2026): external group **"Colleagues"**, joined by a public link capped at 10
   (https://testflight.apple.com/join/kgcPFaxS). The test information shows Jordan's Gmail as the feedback address
   and `/privacy` as the privacy policy; the beta review contact is Jordan. Builds from 19 on are uploaded for outside
-  testers too (`ios/ci/testflight.sh`; 17 was internal-only and couldn't join the group). Each new build has to be
-  added to the group by hand (API: `betaGroups/<id>/relationships/builds`).
+  testers too (`ios/ci/testflight.sh`; 17 was internal-only and couldn't join the group). Since 29 Oct 2026 every
+  build goes to the group by itself: once Apple accepts the upload, `testflight.sh` runs `asc.py to-group`, which
+  adds it and sends it to Apple's beta review (later builds pass in about a minute). Until then it was by hand, and
+  builds 26 and 35 never reached the colleagues. If the run warns, run the line it prints from the VM.
 - Tunnel route: treni.jordancox.org → `http://localhost:8795`, a published application route with no Access.
 - GitHub secrets on the repo: the ASC key, the shared dev certificate, the team, and `TRENI_SECRET` (set by Jordan
   with the skill's `set-secrets.sh`).

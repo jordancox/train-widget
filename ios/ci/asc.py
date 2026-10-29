@@ -11,6 +11,9 @@
 #                                  waits for Apple to finish checking an uploaded build: 0 accepted, 1 refused (with
 #                                  Apple's reasons), 2 not done yet. An upload can succeed and still be thrown away
 #                                  (Insieme's build 12, ITMS-90208); without this only an email says so.
+#   asc.py to-group org.jordancox.treni 35 Colleagues [minutes]
+#                                  an outside testers' group gets a build: added to the group, sent to Apple's beta
+#                                  review, then waits for the verdict: 0 they have it, 1 refused, 2 not done yet
 #   asc.py testflight-group org.jordancox.treni Jordan --testers-from Famiglia
 #                                  an internal TestFlight group that gets every build, with the testers of an
 #                                  existing group (any app); run once the app record exists in App Store Connect
@@ -65,18 +68,23 @@ def revoke_dev_certs():
             s, _ = call('DELETE', f"/v1/certificates/{c['id']}")
             print('revoked' if s == 204 else f'not revoked ({s})', c['id'], c['attributes']['expirationDate'][:10])
 
-def accepted(bundle, build, minutes=20):
+def app_id(bundle, build):
     # A refused token or a hiccup is no verdict on the build: one 401 on the cloud Mac failed Insieme's build 41 as if
-    # Apple had refused it (20 Oct 2026), while the same key worked from the VM. Tried again; then "not known" (2).
+    # Apple had refused it (20 Oct 2026), while the same key worked from the VM. Tried again; then "not known" (None).
     for _ in range(5):
         s, o = call('GET', f'/v1/apps?filter[bundleId]={bundle}')
         if s == 200: break
         time.sleep(20)
     if s != 200:
         print(f'App Store Connect answered {s or "nothing"} five times ({o.get("errors") or o.get("error") or ""}): no verdict on build {build}')
-        return 2
+        return None
     if not o.get('data'): sys.exit(f'no app record for {bundle}')
-    app, end = o['data'][0]['id'], time.time() + minutes * 60
+    return o['data'][0]['id']
+
+def accepted(bundle, build, minutes=20):
+    app = app_id(bundle, build)
+    if not app: return 2
+    end = time.time() + minutes * 60
     while True:
         s, o = call('GET', f'/v1/apps/{app}/buildUploads?limit=10')
         up = next((u['attributes'] for u in o.get('data', []) if u['attributes'].get('cfBundleVersion') == str(build)), None)
@@ -90,6 +98,48 @@ def accepted(bundle, build, minutes=20):
             print(f"build {build}: Apple hasn't finished checking it after {minutes} minutes ({state.get('state') or 'not seen yet'})")
             return 2
         time.sleep(30)
+
+def to_group(bundle, build, name, minutes=10):
+    """Treni's colleagues sat on build 24 while 26 and 35 went only to Jordan (29 Oct 2026): adding each build to their
+    group by hand was forgotten. Run after `accepted`; adding it again or after review does no harm."""
+    app = app_id(bundle, build)
+    if not app: return 2
+    s, o = call('GET', f'/v1/apps/{app}/betaGroups?limit=50')
+    group = next((g for g in o.get('data', []) if g['attributes']['name'] == name), None)
+    if not group: print(f'no TestFlight group called {name} ({s})'); return 1
+    end = time.time() + minutes * 60
+    def state():
+        s, o = call('GET', f'/v1/builds?filter[app]={app}&filter[version]={build}&include=buildBetaDetail')
+        b = (o.get('data') or [None])[0] if s == 200 else None
+        d = next((i['attributes'] for i in o.get('included', []) if i['type'] == 'buildBetaDetails'), {}) if b else {}
+        return b, d.get('externalBuildState')
+    # accepted isn't ready: the build can still be processing a few minutes on
+    while True:
+        b, ext = state()
+        if b and b['attributes']['processingState'] in ('FAILED', 'INVALID'):
+            print(f"build {build} {b['attributes']['processingState'].lower()} in processing"); return 1
+        if b and b['attributes']['processingState'] == 'VALID' and ext not in (None, 'PROCESSING'): break
+        if time.time() > end: print(f"build {build} isn't ready for {name} after {minutes} minutes ({ext or 'not seen'})"); return 2
+        time.sleep(30)
+    if ext in ('NOT_APPLICABLE', 'MISSING_EXPORT_COMPLIANCE', 'PROCESSING_EXCEPTION', 'EXPIRED'):
+        print(f"build {build} can't go to {name}: {ext}" + (' (uploaded with testFlightInternalTestingOnly)' if ext == 'NOT_APPLICABLE' else ''))
+        return 1
+    s, o = call('POST', f"/v1/betaGroups/{group['id']}/relationships/builds", {'data': [{'type': 'builds', 'id': b['id']}]})
+    if s != 204: print(f'build {build} not added to {name}: {s} {o.get("errors") or o.get("error") or ""}'); return 1
+    print(f'build {build} added to {name}')
+    if ext == 'READY_FOR_BETA_SUBMISSION':
+        s, o = call('POST', '/v1/betaAppReviewSubmissions',
+                    {'data': {'type': 'betaAppReviewSubmissions', 'relationships': {'build': {'data': {'type': 'builds', 'id': b['id']}}}}})
+        if s != 201: print(f'build {build} not sent to beta review: {s} {o.get("errors") or o.get("error") or ""}'); return 1
+        print(f'build {build} sent to beta review')
+    # "Sent" isn't "they have it": later builds of a version usually pass in a minute, a new version can take a day
+    while True:
+        if ext in ('IN_BETA_TESTING', 'BETA_APPROVED', 'READY_FOR_BETA_TESTING'): print(f'{name} have build {build}'); return 0
+        if ext == 'BETA_REJECTED': print(f'Apple refused build {build} for outside testers: see App Store Connect'); return 1
+        if time.time() > end:
+            print(f"build {build} is in {name} but still in Apple's beta review ({ext}): they get it when it passes"); return 2
+        time.sleep(30)
+        _, ext = state()
 
 def testflight_group(bundle, name, testers_from=None):
     s, o = call('GET', f'/v1/apps?filter[bundleId]={bundle}')
@@ -125,6 +175,7 @@ def testflight_group(bundle, name, testers_from=None):
 if __name__ == '__main__':
     if sys.argv[1] == 'revoke-dev-certs': revoke_dev_certs(); sys.exit()
     if sys.argv[1] == 'accepted': sys.exit(accepted(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 20))
+    if sys.argv[1] == 'to-group': sys.exit(to_group(sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5]) if len(sys.argv) > 5 else 10))
     if sys.argv[1] == 'testflight-group':
         a = sys.argv[2:]
         src = a[a.index('--testers-from') + 1] if '--testers-from' in a else None
